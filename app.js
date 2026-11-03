@@ -1,5 +1,5 @@
-/* 화면 목업. 서버 없음, 숫자는 전부 예시.
-   un-summit과 같이 일반 스크립트(모듈 아님)로 둔다. */
+/* 게임 화면. 아직 서버 없음, 숫자는 예시 (3단계부터 서버로 바뀐다).
+   un-summit과 같이 일반 스크립트(모듈 아님). 로그인은 js/auth.js(모듈)가 맡는다. */
 
 const $=id=>document.getElementById(id);
 
@@ -29,7 +29,7 @@ function bandOf(taps){            // 몇 번째 구간인가 (0부터)
 const rateAt=taps=>1/Math.pow(2,bandOf(taps).k);
 
 /* ---- 화면 전환 ---- */
-const SECTIONS=["game","word","send","rank","voice","admin","privacy"];
+const SECTIONS=["game","word","send","rank","voice","admin"];
 function show(id){
   SECTIONS.forEach(s=>$(s).classList.toggle("on",s===id));
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===id));
@@ -39,24 +39,13 @@ document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>show(b.datase
 document.addEventListener("click",e=>{
   const o=e.target.closest("[data-open]"); if(o){e.preventDefault();
     const t=o.dataset.open;
-    if(t==="gate") $("gate").classList.add("on");
-    else if(t==="quiz") $("quiz").hidden=false;
-    else {$("gate").classList.remove("on"); show(t);}
+    if(t==="quiz") $("quiz").hidden=false;
+    else show(t);
   }
   const c=e.target.closest("[data-close]"); if(c) $(c.dataset.close).hidden=true;
 });
 
-/* ---- 가입·로그인 ---- */
-$("selClass").innerHTML=REGIONS.map(r=>`<option>${r.cls}반</option>`).join("");
-$("selClub").innerHTML=CLUBS.map(c=>`<option>${c}</option>`).join("");
-document.querySelectorAll("#gateSeg button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll("#gateSeg button").forEach(x=>x.classList.toggle("on",x===b));
-  const join=b.dataset.g==="join";
-  $("joinOnly").hidden=!join;
-  $("gateBtn").textContent=join?"Join":"Start";
-});
-$("gateBtn").onclick=()=>$("gate").classList.remove("on");
-if(/[?&]gate=1/.test(location.search)) $("gate").classList.add("on");
+/* ---- 가입·로그인: js/auth.js 가 맡는다 ---- */
 
 /* ---- 게임 ---- */
 let taps=412, coins=186, frac=0;

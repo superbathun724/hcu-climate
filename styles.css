@@ -158,4 +158,13 @@ code{display:block;font-size:10.5px;background:var(--mist);border-radius:8px;pad
 a{color:var(--brand)}
 
 footer{margin-top:auto;padding:12px 16px 18px;font-size:12px;color:var(--sub);text-align:center}
-#mockTag{position:fixed;bottom:8px;right:8px;background:var(--ink);color:#fff;font-size:10.5px;padding:3px 7px;border-radius:6px;opacity:.7;pointer-events:none;z-index:20}
+#mockTag{position:fixed;bottom:44px;right:8px;background:var(--ink);color:#fff;font-size:10.5px;padding:3px 7px;border-radius:6px;opacity:.7;pointer-events:none;z-index:20}
+
+/* ---------- 가입·로그인 안내 ---------- */
+.msg{margin-top:14px;padding:10px 12px;border-radius:10px;font-size:13.5px;line-height:1.45}
+.msg[hidden]{display:none}
+.msg.bad{background:#FDEDEA;color:#9b2c1f}
+.msg.good{background:#E7F4EA;color:#1B5A2A}
+#gate .btn.wide + .btn.wide{margin-top:8px}
+#gate .btn:disabled{opacity:.5}
+[hidden]{display:none !important}

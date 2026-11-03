@@ -26,12 +26,24 @@
 1. Supabase → SQL Editor → `sql/01_schema.sql` 붙여 넣고 Run
 2. 관리자 계정으로 가입·인증을 마친 뒤, 그 파일 맨 아래의 관리자 등록 SQL 을 이메일만 바꿔 실행
 
+## Supabase 대시보드 설정 (처음 한 번)
+
+- Authentication → Sign In / Providers → Email: Confirm email 켬, 최소 비밀번호 8자
+- Authentication → URL Configuration: Site URL `https://hcu-climate.pages.dev`,
+  Redirect URLs `https://hcu-climate.pages.dev/**`, `http://localhost:8788/**`
+- Authentication → Emails → SMTP Settings: 외부 SMTP (기본 메일은 팀원에게만, 시간당 2통)
+- Authentication → Rate Limits: 메일 시간당 상한을 SMTP 하루 한도에 맞게 올림
+- Authentication → Emails → Templates → Confirm signup: 한국어 문구
+
 ## 파일
 
 | 파일 | 내용 |
 |---|---|
-| `index.html` `styles.css` `app.js` | 화면 (지금은 목업, 서버 연결 전) |
+| `index.html` `styles.css` | 화면 |
+| `app.js` | 게임 화면 (아직 예시 숫자, 3단계부터 서버로) |
 | `js/config.js` | Supabase 주소와 publishable 키 |
+| `js/auth.js` | 가입·로그인·로그아웃, 반·동아리 표시 |
+| `privacy.html` | 개인정보처리방침 (초안) |
 | `sql/01_schema.sql` | 반·동아리·지역, 프로필, 가입 검사, 관리자 |
 
 ## 지킬 것

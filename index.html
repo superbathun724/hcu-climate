@@ -17,39 +17,42 @@
 <div id="app">
 
   <!-- ===== 가입·로그인 ===== -->
-  <div id="gate">
+  <!-- 처음엔 항상 켜져 있다. 로그인이 확인되면 js/auth.js 가 끈다. -->
+  <form id="gate" class="on" novalidate>
     <div class="brand big">hcu-climate</div>
     <h1>Every tap cuts a tonne.</h1>
     <p class="lead">우리는 모두 울산에 살아요. 번 코인은 울산에 쓸 수 없고, 재난 위험이 큰 지역을 돕는 데만 쓸 수 있어요.</p>
 
     <div class="seg" id="gateSeg">
-      <button class="on" data-g="login">로그인</button>
-      <button data-g="join">회원가입</button>
+      <button type="button" class="on" data-g="login">로그인</button>
+      <button type="button" data-g="join">회원가입</button>
     </div>
 
-    <label>학교 이메일</label>
-    <div class="mail"><input id="mailId" placeholder="아이디" autocomplete="username"><span>@hcu.hs.kr</span></div>
-    <label>비밀번호</label>
-    <input type="password" placeholder="8자 이상" autocomplete="current-password">
+    <label for="mailId">학교 이메일</label>
+    <div class="mail"><input id="mailId" placeholder="아이디" autocomplete="username" autocapitalize="off" spellcheck="false"><span>@hcu.hs.kr</span></div>
+    <label for="pw">비밀번호</label>
+    <input id="pw" type="password" placeholder="8자 이상" autocomplete="current-password">
 
     <div id="joinOnly" hidden>
-      <label>반</label>
-      <select id="selClass"></select>
-      <label>동아리</label>
-      <select id="selClub"></select>
+      <label for="selClass">반</label>
+      <select id="selClass"><option value="">불러오는 중…</option></select>
+      <label for="selClub">동아리</label>
+      <select id="selClub"><option value="">불러오는 중…</option></select>
       <p class="fine">반과 동아리는 가입한 뒤에 바꿀 수 없어요. 잘못 골랐다면 관리자에게 알려 주세요.</p>
-      <label class="agree"><input type="checkbox"> <span><a href="#" data-open="privacy">개인정보처리방침</a>에 동의해요</span></label>
+      <label class="agree"><input id="agree" type="checkbox"> <span><a href="privacy.html" target="_blank">개인정보처리방침</a>에 동의해요</span></label>
     </div>
 
-    <button class="btn wide" id="gateBtn">Start</button>
+    <p class="msg" id="gateMsg" hidden></p>
+    <button type="button" class="btn ghost wide" id="resendBtn" hidden>확인 메일 다시 보내기</button>
+    <button type="submit" class="btn wide" id="gateBtn">Start</button>
     <p class="fine" id="gateFine">학교 이메일로만 가입할 수 있어요. 가입하면 확인 메일이 가요.</p>
-  </div>
+  </form>
 
   <!-- ===== 상단바 ===== -->
   <header>
     <div class="brand">hcu-climate</div>
     <div class="hdr">
-      <span class="chip"><span class="dot"></span>2반 · MEME</span>
+      <span class="chip"><span class="dot"></span><span id="chipTxt"></span></span>
       <div class="coins" id="coins">186</div>
     </div>
   </header>
@@ -196,27 +199,15 @@
     </div>
   </section>
 
-  <!-- ===== 개인정보처리방침 (전문은 따로 작성) ===== -->
-  <section id="privacy">
-    <h3>개인정보처리방침</h3>
-    <div class="row col">
-      <div class="t">수집하는 정보</div>
-      <div class="d">학교 이메일, 반, 동아리, 게임 기록(코인·누른 횟수·단어 진도), 건의 글.</div>
-      <div class="t">수집하지 않는 정보</div>
-      <div class="d">이름, 전화번호, 위치, 사진.</div>
-      <div class="t">보관 기간과 삭제</div>
-      <div class="d">(정할 것) 학년이 끝나면 삭제 / 요청하면 즉시 삭제.</div>
-      <div class="t">문의</div>
-      <div class="d">(정할 것) 관리 담당자 연락 방법.</div>
-    </div>
-  </section>
-
   <footer>
-    <a href="#" data-open="privacy">개인정보처리방침</a> · <a href="#" data-open="admin">관리자</a> · <a href="#" data-open="gate">로그아웃</a>
+    <a href="privacy.html">개인정보처리방침</a><span id="adminLink" hidden> · <a href="#" data-open="admin">관리자</a></span> · <a href="#" id="logoutBtn">로그아웃</a>
   </footer>
 
-  <div id="mockTag">목업 · 숫자는 예시</div>
+  <div id="mockTag">게임 숫자는 아직 예시</div>
 </div>
+<!-- supabase-js 는 window.supabase 를 만든다. js/config.js 가 그것을 쓰므로 먼저 읽는다. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="app.js"></script>
+<script type="module" src="js/auth.js"></script>
 </body>
 </html>
