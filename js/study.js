@@ -2,8 +2,11 @@
    study.js — 고른 단어장으로 공부하기
    (voca-web js/quiz.js 의 단계별 유형 방식을 가져와, 자동 채점 문제만 남기고 서버 채점으로 바꿈)
 
-   시작 전에 고른다: 어느 단계의 단어를(전체 또는 1~6단계) 몇 개(10·20·30·전체) 풀지.
-   문제 유형은 단어의 단계가 정한다(js/quiz-core.js). 코인 규칙은 그대로.
+   시작 전에 고른다: 어느 단계 문제로(내 단계대로 또는 1~6단계) 몇 개(10·20·30·전체) 풀지.
+   1~6단계를 고르면 모든 단어를 그 단계 문제로 낸다. 낮은 단계를 거치지 않았어도 바로 도전할 수 있다.
+     도전(고른 단계 ≥ 내 단계): 맞히면 고른 단계의 다음 단계로, 틀려도 단계 그대로
+     복습(고른 단계 < 내 단계): 맞혀도 단계 그대로, 틀리면 1단계로
+   코인은 고른 단계만큼, 같은 단어는 하루에 한 번. 실제 판정은 서버(sql/04_study.sql)가 한다.
    답은 /api/answer 로 보내고, 맞았는지·코인·새 단계는 서버가 정해서 돌려준다.
    ========================================================== */
 import { db } from "./config.js";
@@ -20,7 +23,7 @@ let cur = null;        // {w, level, type}
 let busy = false;
 let stats = { right: 0, total: 0, coins: 0 };
 let words = [];        // 이 단어장의 단어 (내 진도 포함)
-let pickLevel = -1;    // -1 = 전체, 0~5 = 그 단계의 단어만
+let pickLevel = -1;    // -1 = 내 단계대로, 0~5 = 모든 단어를 그 단계 문제로
 let pickCount = 20;    // 0 = 전체
 
 const levelOf = w => w.progress?.[0]?.srs_level ?? 0;
@@ -43,27 +46,28 @@ async function start(s) {
     .eq("set_id", s.id)
     .order("position");
   if (error) { $("stHead").textContent = `${s.name} · 불러오지 못했어요`; return; }
-  words = data.filter(w => typesForLevel(w, levelOf(w)).length);
+  words = data;
   setup();
 }
 
 /* ---------- 시작 전: 단계와 개수 고르기 ---------- */
+const askLevel = w => (pickLevel < 0 ? levelOf(w) : pickLevel);          // 이 단어를 몇 단계 문제로 낼까
+const usable = w => typesForLevel(w, askLevel(w)).length > 0;
+
 function setup() {
   $("stHead").textContent = set.name;
   $("stCard").hidden = true;
   $("stDone").hidden = true;
-  const byLevel = [0, 0, 0, 0, 0, 0];
-  for (const w of words) byLevel[levelOf(w)]++;
-  if (pickLevel >= 0 && !byLevel[pickLevel]) pickLevel = -1;     // 고른 단계에 단어가 없어졌으면 전체로
 
-  const chip = (lv, label, n, sub) =>
-    `<button type="button" class="pick${pickLevel === lv ? " on" : ""}" data-lv="${lv}" ${n ? "" : "disabled"}>
-       <b>${label}</b><small>${sub}</small><span>${n}개</span></button>`;
+  const chip = (lv, label, sub, note) =>
+    `<button type="button" class="pick${pickLevel === lv ? " on" : ""}" data-lv="${lv}">
+       <b>${label}</b><small>${sub}</small><span>${note}</span></button>`;
+  const challenge = lv => words.filter(w => levelOf(w) <= lv).length;
   $("stSetup").innerHTML = `
-    <div class="t">어느 단계의 단어를 풀까요?</div>
+    <div class="t">몇 단계 문제로 풀까요?</div>
     <div class="picks lvpick">
-      ${chip(-1, "전체", words.length, "모든 단어")}
-      ${byLevel.map((n, i) => chip(i, `${i + 1}단계`, n, `${TYPE_NAME[i]} · ${COINS[i]}코인`)).join("")}
+      ${chip(-1, "내 단계대로", "단어마다 지금 단계", `${words.length}개`)}
+      ${COINS.map((c, i) => chip(i, `${i + 1}단계`, `${TYPE_NAME[i]} · ${c}코인`, `도전 ${challenge(i)}개`)).join("")}
     </div>
     <div class="t">몇 개 풀까요?</div>
     <div class="picks cnt">
@@ -75,13 +79,16 @@ function setup() {
   $("stSetup").hidden = false;
 }
 
-function pool() { return pickLevel < 0 ? words : words.filter(w => levelOf(w) === pickLevel); }
+function pool() { return words.filter(usable); }
 function plan() {
-  const n = pool().length, take = pickCount ? Math.min(pickCount, n) : n;
-  const fresh = pool().filter(w => !doneToday(w)).length;
+  const list = pool(), n = list.length, take = pickCount ? Math.min(pickCount, n) : n;
+  const fresh = list.filter(w => !doneToday(w)).length;
+  const how = pickLevel < 0
+    ? "단어마다 지금 단계 문제가 나와요."
+    : `모든 단어가 ${pickLevel + 1}단계(${TYPE_NAME[pickLevel]}) 문제로 나와요. 내 단계보다 높으면 도전이라 맞히면 ${pickLevel >= 4 ? "6단계가 되고" : `${pickLevel + 2}단계로 올라가고`}, 틀려도 단계는 그대로예요. 내 단계보다 낮으면 복습이에요.`;
   $("stPlan").textContent = n
-    ? `${take}개를 풀어요. ${fresh ? `오늘 아직 코인을 안 받은 단어부터 나와요(${fresh}개).` : "이 단어들은 오늘 코인을 이미 받았어요. 연습은 할 수 있어요."}`
-    : "이 단계에는 단어가 없어요.";
+    ? `${how} ${take}개, ${fresh ? `오늘 아직 코인을 안 받은 단어부터 나와요.` : "모두 오늘 코인을 이미 받은 단어라 연습만 돼요."}`
+    : "이 단계로 낼 수 있는 문제가 없어요.";
   $("stStart").disabled = !n;
   $("stStart").textContent = n ? `공부 시작 (${take}개)` : "공부 시작";
 }
@@ -114,14 +121,16 @@ async function begin() {
 
 function ask() {
   const w = queue[idx];
-  const level = levelOf(w);
+  const mine = levelOf(w);
+  const level = askLevel(w);
   const type = pick(typesForLevel(w, level));
   const q = question(w, type);
   cur = { w, level, type };
+  const mode = level > mine ? " · 도전" : level < mine ? " · 복습" : "";
 
   $("stHead").textContent = `${set.name} · ${idx + 1} / ${queue.length}`;
   $("stBar").style.width = (idx / queue.length * 100) + "%";
-  $("stType").textContent = `${level + 1}단계 · ${q.label} · ` +
+  $("stType").textContent = `${level + 1}단계${mode} · ${q.label} · ` +
     (doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요" : `맞히면 ${COINS[level]}코인`);
 
   if (q.cloze) {
@@ -155,7 +164,7 @@ async function submit(answer) {
     res = await fetch("/api/answer", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-      body: JSON.stringify({ word_id: cur.w.id, type: cur.type, answer }),
+      body: JSON.stringify({ word_id: cur.w.id, type: cur.type, answer, level: pickLevel < 0 ? null : pickLevel }),
     });
     body = await res.json().catch(() => ({}));
   } catch {
@@ -182,12 +191,14 @@ async function submit(answer) {
   stats.total++;
   if (body.correct) { stats.right++; stats.coins += body.coins; }
 
+  const moved = body.level > body.level_before ? `${body.level + 1}단계로 올랐어요.`
+              : body.level < body.level_before ? "1단계로 돌아가요." : `단계는 ${body.level + 1}단계 그대로예요.`;
   if (body.correct) {
     showResult("good", body.already_today
       ? `맞았어요! 이 단어는 오늘 코인을 이미 받았어요.`
-      : `맞았어요! +${body.coins}코인 · ${body.level + 1}단계로 올랐어요.`, body.answer);
+      : `맞았어요! +${body.coins}코인 · ${moved}`, body.answer);
   } else {
-    showResult("bad", answer ? "틀렸어요. 1단계로 돌아가요." : "괜찮아요. 1단계부터 다시 해요.", body.answer);
+    showResult("bad", `${answer ? "틀렸어요." : "괜찮아요."} ${moved}`, body.answer);
   }
 }
 

@@ -3,12 +3,14 @@
 --
 -- 03_game.sql 다음에 실행. 몇 번을 돌려도 같은 상태가 됩니다.
 --
--- 규칙 (복습 날짜를 기다리지 않는다. 고른 단어장을 언제든 공부한다)
---   - 맞히면: 그 단어의 지금 단계만큼 코인 (1·2·3·4·5·8), 그리고 한 단계 오른다.
---   - 같은 단어는 하루(한국 날짜)에 한 번만 코인을 받고 한 단계만 오른다.
---     → 같은 단어를 계속 반복해서 코인을 불리거나, 몇 분 만에 6단계로 올리는 길을 막는다.
---     → 공부를 많이 한 학생(다른 단어를 많이 맞힌 학생)은 손해가 없다. 하루 한도는 없다.
---   - 틀리면: 1단계로 돌아간다. 코인 없음.
+-- 규칙 (복습 날짜를 기다리지 않는다. 고른 단어장을 언제든, 고른 단계로 공부한다)
+--   p_level = 이번 문제의 단계(학생이 고른 단계, "내 단계대로"면 그 단어의 지금 단계)
+--   - 맞히면: p_level 단계만큼 코인 (1·2·3·4·5·8)
+--       p_level ≥ 지금 단계(도전) → p_level 의 다음 단계로 오른다(건너뛸 수 있다)
+--       p_level < 지금 단계(복습) → 단계 그대로
+--   - 틀리면: 복습(p_level ≤ 지금 단계)이면 1단계로, 도전(p_level > 지금 단계)이면 그대로
+--   - 같은 단어는 하루(한국 날짜)에 한 번만 코인을 받고 단계가 바뀐다.
+--     → 같은 단어를 반복해서 코인을 불리는 길을 막는다. 하루 한도는 없다.
 --
 -- 채점은 브라우저가 하지 않는다. functions/api/answer.js(Cloudflare)가 채점하고,
 -- 비밀 키로 record_answer 를 부른다. 학생 계정은 record_answer 를 부를 수 없다.
@@ -22,13 +24,17 @@ returns integer language sql immutable as $$
   select (array[1,2,3,4,5,8])[least(greatest(coalesce(p_level,0),0),5) + 1]
 $$;
 
-create or replace function public.record_answer(p_user uuid, p_word bigint, p_correct boolean)
+-- 예전 3칸짜리(단계 없이) 함수는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
+drop function if exists public.record_answer(uuid, bigint, boolean);
+
+create or replace function public.record_answer(p_user uuid, p_word bigint, p_correct boolean, p_level smallint)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_today date := public.kst_today();
   pr public.progress;
   v_before smallint;
+  v_lv smallint;
   v_coins integer := 0;
   v_already boolean := false;
   v_balance numeric;
@@ -46,17 +52,20 @@ begin
   insert into public.progress (user_id, word_id) values (p_user, p_word) on conflict do nothing;
   select * into pr from public.progress where user_id = p_user and word_id = p_word for update;
   v_before := pr.srs_level;
+  v_lv := least(greatest(coalesce(p_level, pr.srs_level), 0), 5);
 
   if p_correct then
     if pr.last_correct_day = v_today then
       v_already := true;                                  -- 오늘 이미 받음: 코인·단계 그대로
     else
-      v_coins := public.word_coins(pr.srs_level);
-      pr.srs_level := least(pr.srs_level + 1, 5);
+      v_coins := public.word_coins(v_lv);
+      if v_lv >= pr.srs_level then
+        pr.srs_level := least(v_lv + 1, 5);               -- 도전 성공: 고른 단계의 다음으로
+      end if;
       pr.last_correct_day := v_today;
     end if;
   else
-    pr.srs_level := 0;
+    if v_lv <= pr.srs_level then pr.srs_level := 0; end if;   -- 복습에서 틀림
     pr.wrong_count := pr.wrong_count + 1;
   end if;
 
@@ -74,7 +83,7 @@ begin
   returning balance into v_balance;
 
   return jsonb_build_object(
-    'correct', p_correct, 'level_before', v_before, 'level', pr.srs_level,
+    'correct', p_correct, 'level_before', v_before, 'level', pr.srs_level, 'asked', v_lv,
     'coins', v_coins, 'already_today', v_already, 'balance', v_balance);
 end;
 $$;
@@ -84,5 +93,5 @@ $$;
 grant select on public.words, public.word_sets, public.progress to service_role;
 
 -- 서버 함수(비밀 키 = service_role)만 부를 수 있다.
-revoke execute on function public.record_answer(uuid, bigint, boolean) from public, anon, authenticated;
-grant  execute on function public.record_answer(uuid, bigint, boolean) to service_role;
+revoke execute on function public.record_answer(uuid, bigint, boolean, smallint) from public, anon, authenticated;
+grant  execute on function public.record_answer(uuid, bigint, boolean, smallint) to service_role;

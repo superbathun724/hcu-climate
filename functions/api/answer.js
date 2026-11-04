@@ -2,7 +2,8 @@
    POST /api/answer — 단어 문제 채점 (Cloudflare Pages Function)
    (voca-web functions/api/trade.js 의 구조를 그대로 가져옴)
 
-   본문(JSON): { word_id, type, answer }
+   본문(JSON): { word_id, type, answer, level }
+               level: 학생이 고른 단계 0~5. 없으면(null) 그 단어의 지금 단계("내 단계대로")
    머리:       Authorization: Bearer <로그인한 학생의 access token>
 
    ── 이 파일이 있는 이유 ──────────────────────────────────
@@ -10,7 +11,7 @@
    그래서 순서를 서버에서 지킨다.
      1. 토큰으로 학생이 누구인지 Supabase 에 확인
      2. 단어와 그 학생의 단계를 서버가 직접 읽는다
-     3. 그 단계에 맞는 문제 유형인지 확인하고, 서버가 채점
+     3. 고른 단계(없으면 지금 단계)에 맞는 문제 유형인지 확인하고, 서버가 채점
      4. 비밀 키로 record_answer 를 불러 진도·코인을 한 번에 기록
    record_answer 는 학생 계정으로는 부를 수 없다(sql/04_study.sql).
 
@@ -75,6 +76,10 @@ export async function onRequestPost({ request, env }) {
   const type = String(body?.type ?? "");
   const answer = String(body?.answer ?? "").slice(0, 200);
   if (!Number.isInteger(wordId) || wordId <= 0) return json({ error: "단어 번호가 이상해요." }, 400);
+  const chosen = body?.level == null ? null : Number(body.level);
+  if (chosen !== null && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= 5)) {
+    return json({ error: "단계가 이상해요." }, 400);
+  }
 
   try {
     // 숨긴 단어장의 단어는 공부할 수 없다
@@ -84,9 +89,10 @@ export async function onRequestPost({ request, env }) {
 
     const [pr] = await rest(env, `progress?user_id=eq.${userId}&word_id=eq.${wordId}&select=srs_level`);
     const level = pr?.srs_level ?? 0;
+    const asked = chosen ?? level;            // 이번 문제의 단계
 
-    // 화면이 낸 유형이 지금 단계와 맞는지. 다른 탭에서 단계가 바뀌었으면 다시 받게 한다.
-    if (!typesForLevel(w, level).includes(type)) {
+    // 화면이 낸 유형이 그 단계의 유형인지. ("내 단계대로"인데 다른 탭에서 단계가 바뀌었으면 다시 받게 한다)
+    if (!typesForLevel(w, asked).includes(type)) {
       return json({ stale: true, level, error: "문제가 바뀌었어요. 다시 풀어 주세요." }, 409);
     }
 
@@ -95,7 +101,7 @@ export async function onRequestPost({ request, env }) {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/record_answer`, {
       method: "POST",
       headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json" },
-      body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct }),
+      body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct, p_level: asked }),
     });
     const text = await res.text();
     if (!res.ok) {

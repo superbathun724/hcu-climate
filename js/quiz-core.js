@@ -9,7 +9,7 @@
      3단계  유의어   단어 → 유의어 하나 (없으면 반의어, 둘 다 없으면 뜻)
      4단계  표현     빈칸 표현 + 해석 → 빈칸 단어 (없으면 철자)
      5단계  예문     빈칸 예문 + 해석 → 빈칸 단어 (없으면 철자)
-     6단계  종합     위에서 가능한 것 중 아무거나
+     6단계  종합     유의어·반의어·표현·예문 중 아무거나 (뜻·철자는 빼서 쉬운 문제로 8코인을 못 받게)
    스스로 채점하는 문제는 없다. 모두 자동 채점이라 코인을 줄 수 있다.
    ========================================================== */
 import { checkMeaning, checkSpelling, checkRelated, normEn, meaningAnswer, relatedAnswer } from "./grade.js";
@@ -61,15 +61,14 @@ export function available(w) {
   return out;
 }
 
-const WANT = [["meaning"], ["spelling"], ["synonym", "antonym"], ["phrase"], ["sentence"], null];
-const FALLBACK = [[], [], ["meaning"], ["spelling"], ["spelling"], []];
+const WANT = [["meaning"], ["spelling"], ["synonym", "antonym"], ["phrase"], ["sentence"], ["synonym", "antonym", "phrase", "sentence"]];
+const FALLBACK = [[], [], ["meaning"], ["spelling"], ["spelling"], ["spelling"]];
 
 /** 이 단계에서 낼 수 있는 유형들. 빈 배열이면 이 단어는 문제를 낼 수 없다. */
 export function typesForLevel(w, level) {
   const lv = Math.max(0, Math.min(MAX_LEVEL, level | 0));
   const avail = available(w);
   if (!avail.length) return [];
-  if (!WANT[lv]) return avail;                                   // 6단계: 아무거나
   let t = WANT[lv].filter(x => avail.includes(x));
   if (!t.length) t = FALLBACK[lv].filter(x => avail.includes(x));
   return t.length ? t : avail;
