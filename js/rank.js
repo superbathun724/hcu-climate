@@ -55,10 +55,10 @@ async function load() {
       <div class="big">이번 주 ${Number(mine.sent).toLocaleString()}코인</div>
       <small>가입 ${mine.members}명 · 한 사람당 ${mine.per_capita == null ? "–" : num1(mine.per_capita)} · 오늘 ${Number(mine.sent_today).toLocaleString()}코인</small>`;
   } else $("myRegion").innerHTML = `
-    <small>우리 반이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
+    <small>우리 ${me.className === "교사" ? "팀" : "반"}이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
     <div class="big">대비율 ${shieldText(sh)}</div>
     <div class="bar"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
-    <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 반 지원 ${Number(mine?.sent_today ?? 0).toLocaleString()}코인</small>`;
+    <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 ${me.className === "교사" ? "팀" : "반"} 지원 ${Number(mine?.sent_today ?? 0).toLocaleString()}코인</small>`;
 
   const rows = kind === "class"
     ? cls.data.map(r => ({ id: r.class_id, t: r.region_name ? `${r.class_name} · ${r.region_name}` : r.class_name, m: r.members, sent: r.sent, v: r.per_capita, me: r.class_id === me.classId }))

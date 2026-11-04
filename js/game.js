@@ -90,7 +90,7 @@ async function loadRegion(classId) {
   if (!cls) return;
   let rid = cls.region_id;
   if (!rid) {
-    // 교사 팀은 맡은 지역이 없다: 재난 중인 곳, 없으면 지금 대비율이 가장 낮은 곳을 보여 준다
+    // 맡은 지역이 없는 팀이면(지금은 없음): 재난 중인 곳, 없으면 지금 대비율이 가장 낮은 곳을 보여 준다
     const ev = currentEvent();
     if (ev) rid = ev.region_id;
     else {

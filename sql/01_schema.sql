@@ -62,18 +62,19 @@ insert into public.regions (id, name, hazard) values
   (4, '네팔',       '홍수·빙하호 붕괴'),
   (5, '파키스탄',   '대홍수'),
   (6, '몰디브',     '해수면 상승'),
-  (7, '방글라데시', '홍수·사이클론')
+  (7, '방글라데시', '홍수·사이클론'),
+  (8, '바누아투',   '사이클론·쓰나미')     -- 교사 팀이 맡는다
 on conflict (id) do update set name = excluded.name, hazard = excluded.hazard;
 
 insert into public.classes (id, region_id)
 select g, g from generate_series(1, 7) g
 on conflict (id) do update set region_id = excluded.region_id;
 
--- 교사 팀: 반 순위에 "교사"로 들어간다. 맡은 지역은 없다(어느 지역에나 보낼 수 있다).
+-- 교사 팀: 반 순위에 "교사"로 들어가고, 8번 지역(바누아투)을 맡는다.
 alter table public.classes add column if not exists name text;          -- 비어 있으면 화면은 "N반"
 alter table public.classes alter column region_id drop not null;
-insert into public.classes (id, region_id, name) values (8, null, '교사')
-on conflict (id) do update set region_id = null, name = excluded.name;
+insert into public.classes (id, region_id, name) values (8, 8, '교사')
+on conflict (id) do update set region_id = excluded.region_id, name = excluded.name;
 
 insert into public.clubs (name) values
   ('MEME'), ('GeNiUS'), ('SIN'), ('INTERPOL'), ('라포르'), ('CUBE'), ('SAMDI'),
