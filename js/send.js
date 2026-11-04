@@ -22,7 +22,7 @@ function card(r, ev) {
   const hit = ev && ev.region_id === r.id;
   const sh = hit ? liveShield(ev) : r.shield;
   const tags = (hit ? `<span class="tag red">재난 · <b class="cd">${mmss(leftMs(ev))}</b> 남음</span><span class="tag x2">지원 ${ev.mult}배</span>` : "") +
-    `<span class="tag ${mine ? "blue" : "soft"}">${mine ? "우리 반이 돕는 곳" : `${r.cls}반이 돕는 곳`}</span>`;
+    (r.cls ? `<span class="tag ${mine ? "blue" : "soft"}">${mine ? "우리 반이 돕는 곳" : `${r.cls}반이 돕는 곳`}</span>` : "");
   return `<div class="row reg${mine ? " mine" : ""}${hit ? " emg" : ""}" data-r="${r.id}">
     <div class="rtop"><div class="t">${esc(r.name)}</div><div class="tags">${tags}</div></div>
     <div class="d">${esc(r.hazard)}</div>

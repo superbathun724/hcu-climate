@@ -88,7 +88,18 @@ function drawScene() {
 async function loadRegion(classId) {
   const { data: cls } = await db.from("classes").select("region_id").eq("id", classId).maybeSingle();
   if (!cls) return;
-  const { data: r } = await db.from("regions").select("id, name, shield").eq("id", cls.region_id).maybeSingle();
+  let rid = cls.region_id;
+  if (!rid) {
+    // 교사 팀은 맡은 지역이 없다: 재난 중인 곳, 없으면 지금 대비율이 가장 낮은 곳을 보여 준다
+    const ev = currentEvent();
+    if (ev) rid = ev.region_id;
+    else {
+      const { data: low } = await db.from("regions").select("id").order("shield").limit(1);
+      rid = low?.[0]?.id;
+    }
+    if (!rid) return;
+  }
+  const { data: r } = await db.from("regions").select("id, name, shield").eq("id", rid).maybeSingle();
   if (!r) return;
   const changed = region?.id !== r.id;
   region = r;

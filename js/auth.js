@@ -93,7 +93,7 @@ function setMode(next) {
 /* ---------- 반·동아리 목록 (로그인 전에도 읽을 수 있게 열어 둠) ---------- */
 async function loadChoices() {
   const [cls, clubs] = await Promise.all([
-    db.from("classes").select("id").order("id"),
+    db.from("classes").select("id, name").order("id"),
     db.from("clubs").select("id, name").order("id"),
   ]);
   if (cls.error || clubs.error) {
@@ -101,7 +101,7 @@ async function loadChoices() {
     return;
   }
   $("selClass").innerHTML = `<option value="">반을 골라 주세요</option>` +
-    cls.data.map(c => `<option value="${c.id}">${c.id}반</option>`).join("");
+    cls.data.map(c => `<option value="${c.id}">${c.name ? escapeHtml(c.name) : `${c.id}반`}</option>`).join("");
   $("selClub").innerHTML = `<option value="">동아리를 골라 주세요</option>` +
     clubs.data.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 }
@@ -206,7 +206,7 @@ async function resend() {
 /* ---------- 로그인된 뒤 ---------- */
 async function onSignedIn() {
   const { data, error } = await db.from("profiles")
-    .select("class_id, club_id, clubs(name), classes(region_id)")
+    .select("class_id, club_id, clubs(name), classes(region_id, name)")
     .maybeSingle();
 
   if (error || !data) {
@@ -218,9 +218,10 @@ async function onSignedIn() {
   // 관리자 링크는 서버가 관리자라고 할 때만 보인다. 숨겨도 관리 기능 자체는 서버가 막는다.
   const { data: admin } = await db.rpc("is_admin");
   const profile = { classId: data.class_id, clubId: data.club_id, clubName: data.clubs?.name ?? "",
+                    className: data.classes?.name ?? `${data.class_id}반`,
                     regionId: data.classes?.region_id ?? null, isAdmin: admin === true };
   window.hcuProfile = profile;
-  $("chipTxt").textContent = `${profile.classId}반 · ${profile.clubName}`;
+  $("chipTxt").textContent = `${profile.className} · ${profile.clubName}`;
   $("adminLink").hidden = !profile.isAdmin;
   $("gate").classList.remove("on");
   say("");

@@ -69,10 +69,17 @@ insert into public.classes (id, region_id)
 select g, g from generate_series(1, 7) g
 on conflict (id) do update set region_id = excluded.region_id;
 
+-- 교사 팀: 반 순위에 "교사"로 들어간다. 맡은 지역은 없다(어느 지역에나 보낼 수 있다).
+alter table public.classes add column if not exists name text;          -- 비어 있으면 화면은 "N반"
+alter table public.classes alter column region_id drop not null;
+insert into public.classes (id, region_id, name) values (8, null, '교사')
+on conflict (id) do update set region_id = null, name = excluded.name;
+
 insert into public.clubs (name) values
   ('MEME'), ('GeNiUS'), ('SIN'), ('INTERPOL'), ('라포르'), ('CUBE'), ('SAMDI'),
   ('동물의 숲'), ('시나브로'), ('AIM'), ('it'), ('강약중강약'), ('CELLS'), ('Liberte'),
-  ('STEM'), ('SYNAPSE'), ('DM'), ('LUCID'), ('EBS'), ('DNT'), ('GIGA')
+  ('STEM'), ('SYNAPSE'), ('DM'), ('LUCID'), ('EBS'), ('DNT'), ('GIGA'),
+  ('교사')                                  -- 교사 동아리: 동아리 순위에 "교사"로 들어간다
 on conflict (name) do nothing;
 
 
@@ -227,4 +234,4 @@ grant  execute on function public.is_admin()         to authenticated;
 
 -- ---------- 확인 ----------
 -- select c.id as 반, r.name as 지역 from public.classes c join public.regions r on r.id = c.region_id order by 1;
--- select count(*) as 동아리수 from public.clubs;   -- 21
+-- select count(*) as 동아리수 from public.clubs;   -- 22 (학생 21 + 교사)

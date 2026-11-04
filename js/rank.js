@@ -45,18 +45,23 @@ async function load() {
     drawClock();
   }
 
-  // 우리 반 카드
+  // 우리 반 카드 (교사 팀은 맡은 지역이 없어 팀 기록만)
   const mine = cls.data.find(r => r.class_id === me.classId);
   const region = reg.data.find(r => r.name === mine?.region_name);
   const sh = Number(region?.shield ?? 0);
-  $("myRegion").innerHTML = `
+  if (mine && !mine.region_name) {
+    $("myRegion").innerHTML = `
+      <small>${esc(mine.class_name)} 팀 · 맡은 지역 없이 어디든 도와요</small>
+      <div class="big">이번 주 ${Number(mine.sent).toLocaleString()}코인</div>
+      <small>가입 ${mine.members}명 · 한 사람당 ${mine.per_capita == null ? "–" : num1(mine.per_capita)} · 오늘 ${Number(mine.sent_today).toLocaleString()}코인</small>`;
+  } else $("myRegion").innerHTML = `
     <small>우리 반이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
     <div class="big">대비율 ${shieldText(sh)}</div>
     <div class="bar"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
     <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 반 지원 ${Number(mine?.sent_today ?? 0).toLocaleString()}코인</small>`;
 
   const rows = kind === "class"
-    ? cls.data.map(r => ({ id: r.class_id, t: `${r.class_id}반 · ${r.region_name}`, m: r.members, sent: r.sent, v: r.per_capita, me: r.class_id === me.classId }))
+    ? cls.data.map(r => ({ id: r.class_id, t: r.region_name ? `${r.class_name} · ${r.region_name}` : r.class_name, m: r.members, sent: r.sent, v: r.per_capita, me: r.class_id === me.classId }))
     : (clubs.data ?? []).map(r => ({ id: r.club_id, t: r.club_name, m: r.members, sent: r.sent, v: r.per_capita, me: r.club_id === me.clubId }));
 
   // 같은 평균이면 같은 등수

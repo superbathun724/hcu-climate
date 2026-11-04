@@ -424,20 +424,22 @@ $$;
 -- ---------- 순위: 이번 기간에 보낸 코인의 1인당 평균 ----------
 -- 분모는 가입한 학생 수. 인원이 적은 팀도 1등을 할 수 있다.
 -- 개인 이름·이메일은 돌려주지 않는다. 팀 단위 숫자만.
-create or replace function public.rank_classes()
-returns table (class_id smallint, region_name text, members integer, sent bigint, sent_today bigint, per_capita numeric)
+-- 돌려주는 열이 늘어서(반 이름) 다시 만든다. 교사 팀은 맡은 지역이 없어 region_name 이 비어 있다.
+drop function if exists public.rank_classes();
+create function public.rank_classes()
+returns table (class_id smallint, class_name text, region_name text, members integer, sent bigint, sent_today bigint, per_capita numeric)
 language sql stable security definer set search_path = public as $$
   with w as (select starts, ends from public.rank_window()),
   t as (
-    select c.id, r.name,
+    select c.id, coalesce(c.name, c.id || '반') as cname, r.name as rname,
            (select count(*) from public.profiles p where p.class_id = c.id)::integer as m,
            coalesce((select sum(amount) from public.sends s, w
                       where s.class_id = c.id and s.sent_at >= w.starts and s.sent_at < w.ends), 0)::bigint as sent,
            coalesce((select sum(amount) from public.sends s where s.class_id = c.id
                       and (s.sent_at at time zone 'Asia/Seoul')::date = public.kst_today()), 0)::bigint as today
-      from public.classes c join public.regions r on r.id = c.region_id)
-  select id, name, m, sent, today, round(sent::numeric / nullif(m, 0), 1) from t
-  order by 6 desc nulls last, 1;
+      from public.classes c left join public.regions r on r.id = c.region_id)
+  select id, cname, rname, m, sent, today, round(sent::numeric / nullif(m, 0), 1) from t
+  order by 7 desc nulls last, 1;
 $$;
 
 create or replace function public.rank_clubs()
