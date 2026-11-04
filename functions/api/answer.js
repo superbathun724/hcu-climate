@@ -50,8 +50,16 @@ async function rest(env, path) {
 }
 
 export async function onRequestPost({ request, env }) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) {
-    return json({ error: "서버 설정이 끝나지 않았어요. 관리자에게 알려 주세요." }, 500);
+  // 어느 변수가 빠졌는지 이름만 알려 준다(값은 절대 내보내지 않는다).
+  const missing = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"].filter(k => !env[k]);
+  if (missing.length) {
+    return json({ error: `서버 설정이 끝나지 않았어요(${missing.join(", ")} 없음). 관리자에게 알려 주세요.` }, 500);
+  }
+  if (!/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(env.SUPABASE_URL)) {
+    return json({ error: "서버 설정이 이상해요(SUPABASE_URL 모양이 달라요). 관리자에게 알려 주세요." }, 500);
+  }
+  if (!/^(sb_secret_|eyJ)/.test(env.SUPABASE_SERVICE_KEY)) {
+    return json({ error: "서버 설정이 이상해요(SUPABASE_SERVICE_KEY 가 sb_secret_ 키가 아니에요). 관리자에게 알려 주세요." }, 500);
   }
   env = { ...env, SUPABASE_URL: env.SUPABASE_URL.replace(/\/+$/, "") };
 
