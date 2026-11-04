@@ -171,3 +171,28 @@ footer{margin-top:auto;padding:12px 16px 18px;font-size:12px;color:var(--sub);te
 #gate .gtitle{font-size:18px;margin:4px 0 2px}
 #gate .links{display:flex;justify-content:center;margin-top:12px}
 #gate .links a{font-weight:600}
+
+/* ---------- 단어장 보기 ---------- */
+.tag.hid{background:var(--mist);color:var(--sub);font-size:10.5px;vertical-align:2px}
+#setView{overflow:auto}
+.wlist{display:flex;flex-direction:column;gap:6px;padding-bottom:16px}
+.wrow{background:#fff;border-radius:12px;padding:10px 12px}
+.wrow .w{font-family:var(--head);font-weight:800;font-size:16px}
+.wrow .s{font-size:13.5px;margin-top:2px}
+.wrow .p{font-size:12.5px;color:var(--sub);margin-top:3px}
+
+/* ---------- 관리: 단어장 ---------- */
+.row.col input:not([type]),.row.col input[type=text]{width:100%;border:1px solid #cfd9e3;border-radius:10px;padding:9px 10px;background:#fff;font-size:15px}
+.row.col .lbl{display:block;font-size:12.5px;font-weight:700;color:var(--sub);margin:10px 0 5px}
+.filebtn{display:inline-block;margin-top:4px}
+#upInfo{margin-top:8px}
+#upInfo .warn{color:#9b2c1f;font-weight:700}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn.danger{background:#FDEDEA;color:#9b2c1f}
+.btn.danger.armed{background:var(--alert);color:#fff}
+.arow{border-top:1px solid var(--mist);padding:10px 0}
+.arow:first-child{border-top:0}
+.arow.is-hidden b{color:var(--sub)}
+.abtns{display:flex;gap:6px;margin-top:6px}
+.aedit{display:flex;gap:6px;margin-top:6px}
+.aedit input{flex:1;min-width:0}

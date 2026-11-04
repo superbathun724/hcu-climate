@@ -142,8 +142,14 @@
     </div>
     <p class="note">맞히면 다음 단계로, 틀리면 1단계로 돌아가요. 표현·예문 해석을 스스로 채점한 경우에는 코인이 없어요.</p>
 
-    <h3>단어 묶음</h3>
-    <div id="sets"></div>
+    <h3>단어장</h3>
+    <div id="sets"><p class="note">불러오는 중…</p></div>
+
+    <!-- 단어장 보기: 학생은 보기만 한다 -->
+    <div class="quiz" id="setView" hidden>
+      <div class="qhead"><span id="setViewName"></span><button class="x" data-close="setView" aria-label="닫기">×</button></div>
+      <div id="setViewList" class="wlist"></div>
+    </div>
 
     <!-- 테스트 화면: 단어 탭 안에서 열린다 -->
     <div class="quiz" id="quiz" hidden>
@@ -196,12 +202,28 @@
   <!-- ===== 관리 (관리자 계정에서만 서버가 연다) ===== -->
   <section id="admin">
     <h3>관리</h3>
-    <div class="row col">
+    <!-- 관리 기능은 전부 서버 함수(admin_…)가 관리자인지 다시 확인한다. 이 화면을 열어도 학생은 아무것도 못 바꾼다. -->
+    <div class="row col" id="upCard">
       <div class="t">단어 CSV 올리기</div>
-      <div class="d">voca-web과 같은 형식이에요. 한 번에 1,000줄까지.</div>
+      <div class="d">voca-web과 같은 형식이에요. 한 번에 1,000줄까지. 이름이 같은 단어장이 있으면 덮어써요.</div>
       <code>word,senses,notes,synonyms,antonyms,phrase1,phrase1_ko,phrase2,phrase2_ko,sentence1,sentence1_ko</code>
-      <div class="frow"><input placeholder="묶음 이름 (예: Day 26)"><button class="btn">파일 선택</button></div>
+      <label class="filebtn btn">CSV 파일 고르기<input type="file" id="upFile" accept=".csv,text/csv" hidden></label>
+      <div id="upPreview" hidden>
+        <label class="lbl" for="upName">단어장 이름 (파일 이름에서 가져옴)</label>
+        <input id="upName" maxlength="60">
+        <p class="d" id="upInfo"></p>
+        <div class="frow"><button class="btn ghost" id="upCancel">취소</button><button class="btn" id="upGo">올리기</button></div>
+      </div>
+      <p class="msg" id="upMsg" hidden></p>
     </div>
+
+    <div class="row col">
+      <div class="t">단어장 관리</div>
+      <div class="d">숨기면 학생 화면에서만 사라지고 단어와 진도는 남아요. 삭제하면 단어와 학생 진도가 같이 지워지고 되돌릴 수 없어요. 이미 받은 코인은 남아요.</div>
+      <div id="setAdmin"><p class="d">불러오는 중…</p></div>
+      <p class="msg" id="setMsg" hidden></p>
+    </div>
+
     <div class="row col">
       <div class="t">건의 답변</div>
       <div class="d">공감이 많은 글: “급식실 줄이 너무 길어요” (공감 87)</div>
@@ -224,5 +246,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="app.js"></script>
 <script type="module" src="js/auth.js"></script>
+<script type="module" src="js/words.js"></script>
+<script type="module" src="js/admin.js"></script>
 </body>
 </html>

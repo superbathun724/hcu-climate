@@ -72,14 +72,7 @@ $("scene").addEventListener("pointerdown",e=>{
 drawGame();
 
 /* ---- 단어 ---- */
-const SETS=[["Day 01",40,[2,6,10,12,6,4]],["Day 02",40,[8,10,12,6,4,0]],["Day 03",40,[20,12,6,2,0,0]],["Day 04",40,[40,0,0,0,0,0]]];
-const LVCOL=["#cfd9e3","#A8C6D8","#7FA9C9","#4E86B5","#2B66A0","#0F4C9C"];
-$("sets").className="sets";
-$("sets").innerHTML=SETS.map(([n,tot,lv])=>`
-  <div class="row"><div class="m"><div class="t">${n}</div>
-    <div class="d">${tot}단어 · 오늘 복습 ${lv[0]>=20?lv[0]:Math.round(lv[1]/2)}개</div>
-    <div class="lvbar">${lv.map((x,i)=>`<i style="width:${x/tot*100}%;background:${LVCOL[i]}"></i>`).join("")}</div></div>
-    <button class="btn ghost" data-open="quiz">풀기</button></div>`).join("");
+/* 단어장 목록과 보기는 js/words.js 가 서버에서 읽는다. */
 
 /* ---- 지원 ---- */
 function regionCard(r,kind){

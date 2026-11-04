@@ -1,0 +1,55 @@
+/* ==========================================================
+   words.js — 단어 탭: 단어장 목록과 단어 보기 (학생은 보기만)
+   숨긴 단어장은 서버(RLS)가 학생에게 아예 보내지 않는다.
+   관리자에게는 보이고, "숨김" 표시가 붙는다.
+   ========================================================== */
+import { db } from "./config.js";
+import { $, esc, onProfile } from "./ui.js";
+
+export async function loadSets() {
+  const box = $("sets");
+  const { data, error } = await db.from("word_sets")
+    .select("id, name, hidden, words(count)")
+    .order("name");
+  if (error) { box.innerHTML = `<p class="note">단어장을 불러오지 못했어요.</p>`; return; }
+  if (!data.length) { box.innerHTML = `<p class="note">아직 단어장이 없어요.</p>`; return; }
+
+  box.innerHTML = data.map(s => `
+    <div class="row">
+      <div class="m"><div class="t">${esc(s.name)}${s.hidden ? ` <span class="tag hid">숨김</span>` : ""}</div>
+        <div class="d">${s.words?.[0]?.count ?? 0}단어</div></div>
+      <button class="btn ghost" data-view="${s.id}" data-name="${esc(s.name)}">보기</button>
+    </div>`).join("");
+}
+
+/* 단어 한 줄: 단어 · 뜻 · 첫 표현 */
+const senseText = w => (w.senses || []).map(s => [s.pos, s.meaning].filter(Boolean).join(" ")).join(" · ");
+function wordRow(w) {
+  const ph = (w.phrases || [])[0];
+  return `<div class="wrow">
+    <div class="w">${esc(w.word)}</div>
+    <div class="s">${esc(senseText(w)) || "<span class='d'>뜻 없음</span>"}</div>
+    ${ph ? `<div class="p">${esc(ph.text)}${ph.meaning ? ` — ${esc(ph.meaning)}` : ""}</div>` : ""}
+  </div>`;
+}
+
+async function openSet(id, name) {
+  $("setViewName").textContent = name;
+  $("setViewList").innerHTML = `<p class="note">불러오는 중…</p>`;
+  $("setView").hidden = false;
+  const { data, error } = await db.from("words")
+    .select("word, senses, phrases")
+    .eq("set_id", id)
+    .order("position");
+  $("setViewList").innerHTML = error
+    ? `<p class="note">단어를 불러오지 못했어요.</p>`
+    : data.map(wordRow).join("") || `<p class="note">단어가 없어요.</p>`;
+}
+
+$("sets").addEventListener("click", e => {
+  const b = e.target.closest("[data-view]");
+  if (b) openSet(b.dataset.view, b.dataset.name);
+});
+
+onProfile(() => loadSets());
+window.addEventListener("hcu:sets-changed", () => loadSets());   // 관리자가 바꾸면 다시 읽는다

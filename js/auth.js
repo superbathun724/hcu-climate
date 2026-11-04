@@ -215,15 +215,14 @@ async function onSignedIn() {
     return say("계정 정보를 찾을 수 없어요. 관리자에게 알려 주세요.");
   }
 
-  const profile = { classId: data.class_id, clubId: data.club_id, clubName: data.clubs?.name ?? "" };
-  window.hcuProfile = profile;
-  $("chipTxt").textContent = `${profile.classId}반 · ${profile.clubName}`;
-  $("gate").classList.remove("on");
-  say("");
-
   // 관리자 링크는 서버가 관리자라고 할 때만 보인다. 숨겨도 관리 기능 자체는 서버가 막는다.
   const { data: admin } = await db.rpc("is_admin");
-  $("adminLink").hidden = admin !== true;
+  const profile = { classId: data.class_id, clubId: data.club_id, clubName: data.clubs?.name ?? "", isAdmin: admin === true };
+  window.hcuProfile = profile;
+  $("chipTxt").textContent = `${profile.classId}반 · ${profile.clubName}`;
+  $("adminLink").hidden = !profile.isAdmin;
+  $("gate").classList.remove("on");
+  say("");
 
   window.dispatchEvent(new CustomEvent("hcu:profile", { detail: profile }));
 }
