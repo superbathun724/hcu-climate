@@ -66,7 +66,7 @@ Workers & Pages → hcu-climate → Settings → Variables and Secrets (Producti
 | `js/nav.js` | 탭 전환 |
 | `js/auth.js` | 가입·로그인·로그아웃·비밀번호 찾기 |
 | `js/game.js` | 게임 탭: 탭 → 서버(2초마다 모아서), 우리 반 지역 풍경과 대비율 |
-| `js/scenes.js` | 지역 7곳 풍경 SVG, 방파제·제방 그림 (un-summit SCENES 방식) |
+| `js/scenes.js` | 지역 8곳 풍경 SVG(실제 풍경 사진 참고), 방파제·제방 그림 (un-summit SCENES 방식) |
 | `js/words.js` | 단어 탭: 단어장 목록·보기 |
 | `js/study.js` | 고른 단어장으로 공부 (20개씩) |
 | `js/quiz-core.js` | 단계별 문제 유형과 채점 — 브라우저와 서버가 같이 씀 |

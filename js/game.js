@@ -67,8 +67,6 @@ function drawShield() {
   if (body) { body.setAttribute("y", WALL_FOOT - h); body.setAttribute("height", h); }
   if (cap) { cap.setAttribute("y", WALL_FOOT - h - 3); cap.setAttribute("fill", sh >= 50 ? "#8FE3A0" : cap.dataset.base); }
   $("hazard").style.opacity = hit ? 0.95 : 0.08 + 0.8 * (1 - Math.min(sh, 50) / 50);
-  const txt = document.getElementById("wallTxt");
-  if (txt) txt.style.display = sh >= 50 ? "none" : "";          // 넘으면 글씨가 방벽에 겹친다
   $("sceneName").textContent = region.name;
   $("sceneShield").textContent = hit ? `재난 중 · 대비율 ${shieldText(real)}` : `대비율 ${shieldText(real)}${real >= 50 ? " · 버틸 수 있어요" : ""}`;
   $("sceneTag").hidden = false;
