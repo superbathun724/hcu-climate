@@ -10,7 +10,7 @@
    답은 /api/answer 로 보내고, 맞았는지·코인·새 단계는 서버가 정해서 돌려준다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, setBalance, tick, kstToday } from "./ui.js";
+import { $, esc, setBalance, getBalance, coinPop, tick, kstToday } from "./ui.js";
 import { typesForLevel, question, COINS } from "./quiz-core.js";
 
 const COUNTS = [10, 20, 30, 0];          // 0 = 전체
@@ -39,6 +39,7 @@ async function start(s) {
   $("stSetup").hidden = true;
   $("stBar").style.width = "0";
   $("stHead").textContent = `${s.name} · 불러오는 중…`;
+  setBalance(getBalance());                 // 공부 화면 코인 칩을 지금 값으로
 
   // progress 는 RLS 때문에 내 것만 붙어 온다
   const { data, error } = await db.from("words")
@@ -178,6 +179,7 @@ async function submit(answer) {
     return;
   }
   if (!res?.ok) {
+    if (/잠겨/.test(body.error || "")) window.dispatchEvent(new Event("hcu:locked"));
     showResult("bad", body.error || "채점하지 못했어요. 잠시 뒤에 다시 해 주세요.");
     $("stInput").disabled = $("stGo").disabled = $("stSkip").disabled = false;
     $("stNext").hidden = true;
@@ -187,7 +189,9 @@ async function submit(answer) {
   // 화면의 단계·날짜를 서버 값으로
   const p = cur.w.progress?.[0] ?? {};
   cur.w.progress = [{ ...p, srs_level: body.level, last_correct_day: body.correct && !body.already_today ? kstToday() : p.last_correct_day }];
+  // 코인은 맞힐 때마다 서버 지갑에 바로 들어간다(record_answer). 중간에 그만둬도 이미 받은 코인은 그대로.
   if (body.balance != null) setBalance(body.balance);
+  if (body.coins) coinPop("stCoinChip", body.coins);
   stats.total++;
   if (body.correct) { stats.right++; stats.coins += body.coins; }
 
@@ -196,7 +200,7 @@ async function submit(answer) {
   if (body.correct) {
     showResult("good", body.already_today
       ? `맞았어요! 이 단어는 오늘 코인을 이미 받았어요.`
-      : `맞았어요! +${body.coins}코인 · ${moved}`, body.answer);
+      : `맞았어요! +${body.coins}코인이 들어왔어요 · ${moved}`, body.answer);
   } else {
     showResult("bad", `${answer ? "틀렸어요." : "괜찮아요."} ${moved}`, body.answer);
   }

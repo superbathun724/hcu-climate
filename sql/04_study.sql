@@ -47,6 +47,7 @@ begin
     raise exception '계정 정보를 찾을 수 없어요.' using errcode = 'P0001';
   end if;
 
+  perform public.assert_unlocked(p_user);            -- 잠긴 계정은 단어 코인도 없음 (03_game.sql)
   perform public.ensure_player(p_user);
 
   insert into public.progress (user_id, word_id) values (p_user, p_word) on conflict do nothing;

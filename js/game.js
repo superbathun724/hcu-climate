@@ -7,13 +7,22 @@
    누를 때마다 서버에 보내지 않는다. 2초마다 "몇 번 눌렀다"를 모아 보내고(submit_taps),
    코인은 서버가 계산한 값으로 맞춘다. 화면의 숫자는 그 사이를 잇는 어림값일 뿐이다.
    하루 한도는 없고, 많이 누를수록 한 번에 받는 코인이 절반씩 준다(sql/03_game.sql).
+
+   매크로 감지: 최근 30번의 누름을 보고
+     - 간격이 기계처럼 일정함(평균 250ms 미만, 흔들림 6% 미만)
+     - 같은 자리(3px 안)를 사람이 못 낼 속도(초당 14번 넘게)로 누름
+     - 스크립트가 만든 가짜 누름(isTrusted=false)
+   이면 더 받지 않고 서버에 알린다(submit_taps 의 p_flag). 서버가 계정을 잠그고 관리자가 풀어 준다.
+   이 검사는 화면 쪽이라 우회할 수 있다. 서버도 따로 "사람 속도보다 훨씬 많이"를 본다.
    ========================================================== */
 import { db, SUPABASE_URL, SUPABASE_KEY } from "./config.js";
-import { $, setBalance, getBalance, onProfile, tick, num1 } from "./ui.js";
+import { $, setBalance, getBalance, onProfile, tick, num1, shieldText } from "./ui.js";
+import { currentEvent, liveShield } from "./event.js";
 import { SCENES, wallSVG, WALL_FOOT, WALL_RISE } from "./scenes.js";
 
 const BAND = 300;                 // sql tap_band() 와 같게
 const FLUSH_MS = 2000;
+const CHECK_N = 30;               // 매크로 검사에 쓰는 최근 누름 수
 
 /* 오늘 taps 번 누른 상태가 몇 번째 구간인가 (구간마다 길이 2배, 효율 절반) */
 function bandOf(taps) {
@@ -49,16 +58,19 @@ let region = null;      // {id, name, shield}
 
 function drawShield() {
   if (!region) return;
-  const sh = Math.max(0, Math.min(100, Number(region.shield) || 0));
+  const ev = currentEvent(), hit = ev && ev.region_id === region.id;
+  const real = hit ? liveShield(ev) : Math.max(0, Number(region.shield) || 0);
+  const sh = Math.min(100, real);                       // 그림은 100% 에서 멈춘다(넘친 것은 글자로)
+  $("scene").classList.toggle("hit", !!hit);
   const h = 6 + sh * WALL_RISE;
   const body = document.getElementById("wallBody"), cap = document.getElementById("wallCap");
   if (body) { body.setAttribute("y", WALL_FOOT - h); body.setAttribute("height", h); }
   if (cap) { cap.setAttribute("y", WALL_FOOT - h - 3); cap.setAttribute("fill", sh >= 50 ? "#8FE3A0" : cap.dataset.base); }
-  $("hazard").style.opacity = 0.08 + 0.8 * (1 - Math.min(sh, 50) / 50);
+  $("hazard").style.opacity = hit ? 0.95 : 0.08 + 0.8 * (1 - Math.min(sh, 50) / 50);
   const txt = document.getElementById("wallTxt");
   if (txt) txt.style.display = sh >= 50 ? "none" : "";          // 넘으면 글씨가 방벽에 겹친다
   $("sceneName").textContent = region.name;
-  $("sceneShield").textContent = `대비율 ${num1(sh)}%${sh >= 50 ? " · 버틸 수 있어요" : ""}`;
+  $("sceneShield").textContent = hit ? `재난 중 · 대비율 ${shieldText(real)}` : `대비율 ${shieldText(real)}${real >= 50 ? " · 버틸 수 있어요" : ""}`;
   $("sceneTag").hidden = false;
 }
 
@@ -90,21 +102,31 @@ async function load() {
   taps = data.taps_today;
   pending = 0;
   setBalance(data.balance);
+  if (data.locked) return window.dispatchEvent(new Event("hcu:locked"));
   ready = true;
   draw();
 }
 
 /* 모아 둔 탭을 보낸다. 다른 화면(지원·단어)은 코인을 쓰기 전에 이것을 먼저 부른다. */
+let flag = null;          // 매크로로 보인 근거 (한 번 잡히면 서버에 알리고 끝)
+
 async function flush() {
   if (inflight) await inflight;
-  if (!pending) return;
+  if (!pending && !flag) return;
   const n = pending;
   pending = 0;
+  const f = flag;
   inflight = (async () => {
-    const { data, error } = await db.rpc("submit_taps", { p_n: n });
+    const { data, error } = await db.rpc("submit_taps", f ? { p_n: n, p_flag: f } : { p_n: n });
     if (error) {
       pending += n;
       tick("누른 기록을 저장하지 못했어요. 인터넷 연결을 확인해 주세요.", "bad");
+      return;
+    }
+    if (data.locked) {
+      ready = false; pending = 0; flag = null;
+      setBalance(data.balance); taps = data.taps_today; draw();
+      window.dispatchEvent(new Event("hcu:locked"));
       return;
     }
     // 서버 값 + 보내는 동안 더 누른 것
@@ -118,8 +140,38 @@ async function flush() {
 }
 window.hcuFlushTaps = flush;
 
+/* ---------- 매크로 검사 ---------- */
+const log = [];           // 최근 누름 {t, x, y}
+function suspicious(e) {
+  if (!e.isTrusted) return { reason: "synthetic" };
+  log.push({ t: e.timeStamp, x: Math.round(e.clientX), y: Math.round(e.clientY) });
+  if (log.length > CHECK_N) log.shift();
+  if (log.length < CHECK_N) return null;
+
+  const gaps = [];
+  for (let i = 1; i < log.length; i++) gaps.push(log[i].t - log[i - 1].t);
+  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  const sd = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) ** 2, 0) / gaps.length);
+  const cv = sd / mean;
+  const span = log[log.length - 1].t - log[0].t;
+  const sameSpot = log.every(p => Math.abs(p.x - log[0].x) <= 3 && Math.abs(p.y - log[0].y) <= 3);
+  const perSec = (CHECK_N - 1) / (span / 1000);
+  const detail = { n: CHECK_N, mean_ms: Math.round(mean), cv: Math.round(cv * 1000) / 1000, per_sec: Math.round(perSec * 10) / 10, same_spot: sameSpot };
+
+  if (mean < 250 && cv < 0.06) return { reason: "regular-interval", ...detail };
+  if (sameSpot && perSec > 14) return { reason: "same-spot-fast", ...detail };
+  return null;
+}
+
 $("scene").addEventListener("pointerdown", e => {
   if (!ready) return;
+  const bad = suspicious(e);
+  if (bad) {
+    ready = false;
+    flag = { ...bad, at: new Date().toISOString(), ua: navigator.userAgent.slice(0, 120) };
+    flush();
+    return;
+  }
   const r = rateAt(taps);
   taps++; pending++;
   setBalance(getBalance() + r);
@@ -156,7 +208,10 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pagehide", flushOnLeave);
 
 db.auth.onAuthStateChange((_e, session) => { token = session?.access_token ?? ""; });
-window.addEventListener("hcu:signout", () => { ready = false; taps = pending = 0; region = null; setBalance(0); draw(); $("sceneTag").hidden = true; });
+window.addEventListener("hcu:signout", () => { ready = false; taps = pending = 0; region = null; flag = null; log.length = 0; setBalance(0); draw(); $("sceneTag").hidden = true; });
+/* 재난: 1초마다 우리 지역 그림을 다시 (제방이 조금씩 낮아진다) */
+window.addEventListener("hcu:second", e => { if (region && e.detail.region_id === region.id) drawShield(); });
+window.addEventListener("hcu:event", () => { if (window.hcuProfile) loadRegion(window.hcuProfile.classId); });
 onProfile(p => { load(); loadRegion(p.classId); });
 // 코인을 보낸 뒤나 게임 탭으로 돌아올 때 대비율을 새로 (다른 학생이 보낸 것까지)
 window.addEventListener("hcu:tab", e => { if (e.detail === "game" && window.hcuProfile) loadRegion(window.hcuProfile.classId); });

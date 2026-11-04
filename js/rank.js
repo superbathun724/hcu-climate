@@ -5,7 +5,7 @@
    서버는 팀 단위 숫자만 준다. 학생 개인 이름·이메일은 오지 않는다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, onProfile, num1 } from "./ui.js";
+import { $, esc, onProfile, num1, shieldText } from "./ui.js";
 
 let kind = "class";
 let me = null;
@@ -51,7 +51,7 @@ async function load() {
   const sh = Number(region?.shield ?? 0);
   $("myRegion").innerHTML = `
     <small>우리 반이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
-    <div class="big">대비율 ${num1(sh)}%</div>
+    <div class="big">대비율 ${shieldText(sh)}</div>
     <div class="bar"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
     <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 반 지원 ${Number(mine?.sent_today ?? 0).toLocaleString()}코인</small>`;
 

@@ -182,5 +182,40 @@ $("exCopy").addEventListener("click", async () => {
   catch { say($("exMsg"), "복사하지 못했어요. CSV 내려받기를 써 주세요."); }
 });
 
+/* ---------- 잠긴 계정 ---------- */
+const REASON = {
+  "tap-pattern": "누르는 패턴이 기계 같음",
+  "too-fast": "사람 속도보다 훨씬 많이 보냄(서버)",
+};
+const DETAIL = d => !d ? "" :
+  d.reason === "regular-interval" ? `간격이 일정함 · 평균 ${d.mean_ms}ms · 흔들림 ${Math.round(d.cv * 100)}%` :
+  d.reason === "same-spot-fast" ? `같은 자리 · 초당 ${d.per_sec}번` :
+  d.reason === "synthetic" ? "스크립트가 만든 누름" :
+  d.sent ? `${d.sent}번을 보냄(허용 ${d.allowed}) · ${d.strikes}회` : "";
+
+async function loadLocks() {
+  const { data, error } = await db.rpc("admin_locked");
+  if (error) { $("lockList").innerHTML = `<p class="d">불러오지 못했어요.</p>`; return; }
+  $("lockList").innerHTML = data.length ? data.map(u => `
+    <div class="arow" data-u="${u.user_id}">
+      <div class="m"><b>${esc(u.email)}</b> <span class="d">${u.class_id ?? "?"}반 · ${esc(u.club_name ?? "")}</span></div>
+      <div class="d">${esc(REASON[u.reason] ?? u.reason)} · ${esc(DETAIL(u.detail))} · ${new Date(u.locked_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}${u.flags > 1 ? ` · 지금까지 ${u.flags}번` : ""}</div>
+      <div class="abtns"><button class="btn sm" data-unlock>잠금 풀기</button></div>
+    </div>`).join("") : `<p class="d">잠긴 계정이 없어요.</p>`;
+  const n = data.length;
+  document.querySelector("#adminLink a").classList.toggle("dot", n > 0);
+}
+
+$("lockList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-unlock]"); if (!b) return;
+  const row = b.closest(".arow");
+  b.disabled = true;
+  const { error } = await db.rpc("admin_unlock", { p_user: row.dataset.u });
+  if (error) { b.disabled = false; return say($("lockMsg"), serverMsg(error)); }
+  say($("lockMsg"), "잠금을 풀었어요. 그 학생은 새로고침하면 다시 쓸 수 있어요.", "good");
+  loadLocks();
+});
+window.addEventListener("hcu:tab", e => { if (e.detail === "admin" && window.hcuProfile?.isAdmin) loadLocks(); });
+
 /* 관리자에게만 목록을 읽는다. 학생에게는 관리 화면 링크도 안 보인다. */
-onProfile(p => { if (p.isAdmin) loadAdminSets(); });
+onProfile(p => { if (p.isAdmin) { loadAdminSets(); loadLocks(); } });

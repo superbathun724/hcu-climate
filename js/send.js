@@ -1,31 +1,48 @@
 /* ==========================================================
    send.js — 지원 탭: 바깥 지역에 코인 보내기
-   (un-summit Support 탭의 카드·대비율 막대·50% 선을 가져와 서버 저장으로 바꿈)
+   (un-summit Support 탭의 카드·대비율 막대·50% 선·빨간 재난 카드를 가져와 서버 저장으로 바꿈)
 
    울산은 목록에 없다. 코인을 받을 수 있는 곳은 regions 표의 바깥 7곳뿐이다.
-   우리 반이 맡은 곳이 맨 위, 나머지는 반 번호 순.
-   재난(빨간 고정·2배)은 재난 규칙을 정한 뒤 붙인다.
+   순서: 재난 중인 지역(빨강, 맨 위) → 우리 반이 맡은 곳 → 나머지 반 번호 순.
+   재난 중에는 보낸 코인이 2배로 들어가고, 그 지역 대비율이 재난 대응에 조금씩 쓰인다.
+   대비율은 100% 를 넘어도 쌓인다(비축). 막대는 100% 에서 멈추고 글자로 비축분을 보여 준다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, setBalance, getBalance, tick, onProfile, serverMsg, num1 } from "./ui.js";
+import { $, esc, setBalance, getBalance, tick, onProfile, serverMsg, num1, shieldText } from "./ui.js";
+import { currentEvent, leftMs, liveShield, liveDrained, mmss } from "./event.js";
 
 let regions = [];     // [{id, name, hazard, shield, cls}]
 let myClass = 0;
 
 const SAFE = 50;
-const shieldTxt = v => `대비율 ${num1(v)}% · ` + (v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
+const shieldLine = v => `대비율 ${shieldText(v)} · ` + (v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
 
-function card(r) {
+function card(r, ev) {
   const mine = r.cls === myClass;
-  return `<div class="row reg${mine ? " mine" : ""}" data-r="${r.id}">
-    <div class="rtop"><div class="t">${esc(r.name)}</div>
-      <span class="tag ${mine ? "blue" : "soft"}">${mine ? "우리 반이 돕는 곳" : `${r.cls}반이 돕는 곳`}</span></div>
+  const hit = ev && ev.region_id === r.id;
+  const sh = hit ? liveShield(ev) : r.shield;
+  const tags = (hit ? `<span class="tag red">재난 · <b class="cd">${mmss(leftMs(ev))}</b> 남음</span><span class="tag x2">지원 ${ev.mult}배</span>` : "") +
+    `<span class="tag ${mine ? "blue" : "soft"}">${mine ? "우리 반이 돕는 곳" : `${r.cls}반이 돕는 곳`}</span>`;
+  return `<div class="row reg${mine ? " mine" : ""}${hit ? " emg" : ""}" data-r="${r.id}">
+    <div class="rtop"><div class="t">${esc(r.name)}</div><div class="tags">${tags}</div></div>
     <div class="d">${esc(r.hazard)}</div>
-    <div class="shield"><div class="bar"><i style="width:${Math.min(100, r.shield)}%"></i><span class="safe"></span></div>
-      <div class="d sv">${shieldTxt(r.shield)}</div></div>
+    <div class="shield"><div class="bar${sh > 100 ? " over" : ""}"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
+      <div class="d sv">${shieldLine(sh)}</div>
+      ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요 · <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}%</div>` : ""}</div>
     <div class="give"><button class="btn coin" data-amt="10">10</button><button class="btn coin" data-amt="50">50</button><button class="btn coin" data-amt="100">100</button></div>
     <div class="give own"><input type="number" inputmode="numeric" min="1" step="1" placeholder="직접 입력"><button class="btn" data-amt="own">보내기</button></div>
   </div>`;
+}
+
+function render() {
+  const ev = currentEvent();
+  const order = r => (ev && ev.region_id === r.id ? 0 : r.cls === myClass ? 1 : 2);
+  regions.sort((a, b) => order(a) - order(b) || a.cls - b.cls);
+  // 입력 중인 숫자는 지키며 다시 그린다
+  const typed = {};
+  document.querySelectorAll("#sendList .row").forEach(el => { const v = el.querySelector(".own input")?.value; if (v) typed[el.dataset.r] = v; });
+  $("sendList").innerHTML = regions.map(r => card(r, ev)).join("");
+  for (const [id, v] of Object.entries(typed)) { const i = document.querySelector(`#sendList .row[data-r="${id}"] .own input`); if (i) i.value = v; }
 }
 
 export async function loadRegions() {
@@ -35,10 +52,37 @@ export async function loadRegions() {
   ]);
   if (rg.error || cl.error) { $("sendList").innerHTML = `<p class="note">지역을 불러오지 못했어요.</p>`; return; }
   const clsOf = new Map(cl.data.map(c => [c.region_id, c.id]));
-  regions = rg.data.map(r => ({ ...r, shield: Number(r.shield), cls: clsOf.get(r.id) ?? 0 }))
-    .sort((a, b) => (b.cls === myClass) - (a.cls === myClass) || a.cls - b.cls);
-  $("sendList").innerHTML = regions.map(card).join("");
+  regions = rg.data.map(r => ({ ...r, shield: Number(r.shield), cls: clsOf.get(r.id) ?? 0 }));
+  render();
 }
+
+/* 1초마다 재난 카드의 남은 시간·대비율만 고친다(카드를 다시 그리지 않아 버튼이 씹히지 않는다) */
+window.addEventListener("hcu:second", e => {
+  const ev = e.detail, el = document.querySelector(`#sendList .row[data-r="${ev.region_id}"]`);
+  if (!el) return;
+  const sh = liveShield(ev);
+  el.querySelector(".cd").textContent = mmss(leftMs(ev));
+  el.querySelector(".bar i").style.width = Math.min(100, sh) + "%";
+  el.querySelector(".sv").textContent = shieldLine(sh);
+  el.querySelector(".dr").textContent = "−" + num1(liveDrained(ev));
+});
+/* 15초마다 재난 정보가 오면: 재난이 시작·끝났을 때만 목록 순서를 다시 짜고,
+   그 밖에는 이미 있는 카드의 숫자만 고친다. (un-summit "목록을 다시 그리지 않는다": 누르던 버튼이 바뀌면 탭이 씹힌다) */
+let shownEv = null;
+window.addEventListener("hcu:event", async e => {
+  const id = e.detail?.id ?? null;
+  if (id !== shownEv) { shownEv = id; return loadRegions(); }
+  const { data } = await db.from("regions").select("id, shield");
+  for (const row of data ?? []) {
+    const r = regions.find(x => x.id === row.id); if (!r) continue;
+    r.shield = Number(row.shield);
+    if (e.detail && e.detail.region_id === r.id) continue;      // 재난 카드는 1초마다 따로 그린다
+    const el = document.querySelector(`#sendList .row[data-r="${r.id}"]`); if (!el) continue;
+    el.querySelector(".bar i").style.width = Math.min(100, r.shield) + "%";
+    el.querySelector(".bar").classList.toggle("over", r.shield > 100);
+    el.querySelector(".sv").textContent = shieldLine(r.shield);
+  }
+});
 
 $("sendList").addEventListener("click", async e => {
   const b = e.target.closest("[data-amt]"); if (!b) return;
@@ -55,14 +99,22 @@ $("sendList").addEventListener("click", async e => {
   }
   const { data, error } = await db.rpc("send_coins", { p_region: r.id, p_amount: amt });
   el.querySelectorAll("button").forEach(x => x.disabled = false);
-  if (error) return tick(serverMsg(error), "bad");
+  if (error) {
+    if (/잠겨/.test(error.message)) window.dispatchEvent(new Event("hcu:locked"));
+    return tick(serverMsg(error), "bad");
+  }
 
   r.shield = Number(data.shield);
+  const ev = currentEvent();
+  if (ev && ev.region_id === r.id) { ev.shield = r.shield; ev.drained = liveDrained(ev); }   // 다음 1초 계산이 새 값에서 이어지게
   el.querySelector(".bar i").style.width = Math.min(100, r.shield) + "%";
-  el.querySelector(".sv").textContent = shieldTxt(r.shield);
+  el.querySelector(".bar").classList.toggle("over", r.shield > 100);
+  el.querySelector(".sv").textContent = shieldLine(r.shield);
   inp.value = "";
   setBalance(data.balance);
-  tick(`${r.name}에 ${amt}코인을 보냈어요.`, "good");
+  tick(data.mult > 1
+    ? `${r.name}에 ${amt}코인 → 재난 중이라 ${data.mult}배! 대비율 +${num1(amt * data.mult / 20)}%`
+    : `${r.name}에 ${amt}코인을 보냈어요. 대비율 +${num1(amt / 20)}%`, "good");
   window.dispatchEvent(new Event("hcu:sent"));
 });
 

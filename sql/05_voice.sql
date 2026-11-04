@@ -89,6 +89,7 @@ begin
   if not exists (select 1 from public.profiles where user_id = v_uid) then
     raise exception '계정 정보를 찾을 수 없어요.' using errcode = 'P0001';
   end if;
+  perform public.assert_unlocked(v_uid);
   if char_length(v_body) < 2   then raise exception '두 글자 이상 적어 주세요.' using errcode = 'P0001'; end if;
   if char_length(v_body) > 300 then raise exception '300자까지 쓸 수 있어요.' using errcode = 'P0001'; end if;
   if (select count(*) from public.suggestions
@@ -106,6 +107,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_owner uuid; v_on boolean;
 begin
   if v_uid is null then raise exception '로그인이 필요해요.' using errcode = '42501'; end if;
+  perform public.assert_unlocked(v_uid);
   select user_id into v_owner from public.suggestions where id = p_id and not hidden and approved_at is not null;
   if v_owner is null then raise exception '글을 찾을 수 없어요.' using errcode = 'P0001'; end if;
   if v_owner = v_uid then raise exception '내 글에는 공감할 수 없어요.' using errcode = 'P0001'; end if;

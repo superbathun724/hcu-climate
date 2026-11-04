@@ -36,8 +36,24 @@ export function onProfile(fn) {
    여러 화면이 서버에서 받은 잔액을 여기로 넣는다. 화면에는 정수만 보인다. */
 let balance = 0;
 export function setBalance(v) {
+  const before = Math.floor(balance);
   balance = Number(v) || 0;
-  $("coins").textContent = Math.floor(balance).toLocaleString();
+  const txt = Math.floor(balance).toLocaleString();
+  $("coins").textContent = txt;
+  const st = document.getElementById("stCoins");          // 공부 화면에도 같은 숫자
+  if (st) st.textContent = txt;
+  return Math.floor(balance) - before;
+}
+/** 코인 칩 옆에 "+3" 이 떠오른다. 공부 중에 코인이 실제로 들어왔다는 표시. */
+export function coinPop(chipId, n) {
+  const chip = document.getElementById(chipId);
+  if (!chip || !n) return;
+  const p = document.createElement("span");
+  p.className = "cpop";
+  p.textContent = `+${n}`;
+  chip.appendChild(p);
+  chip.classList.remove("bump"); void chip.offsetWidth; chip.classList.add("bump");
+  setTimeout(() => p.remove(), 1100);
 }
 export const getBalance = () => balance;
 
@@ -59,3 +75,13 @@ export const num1 = v => (Math.round(Number(v) * 10) / 10).toLocaleString();
 
 /* 로그아웃하면 알림 줄을 비운다(다음 사람에게 앞사람 알림이 남지 않게) */
 window.addEventListener("hcu:signout", () => tick(""));
+
+/** 대비율 글자. 100% 를 넘으면 비축분을 따로 적는다. */
+export const shieldText = v => {
+  const n = Number(v) || 0;
+  return n > 100 ? `${num1(n)}% (비축 ${num1(n - 100)}%)` : `${num1(n)}%`;
+};
+
+/* 계정 잠금 화면. 서버가 잠겼다고 하면 어느 화면에서든 이 이벤트를 보낸다. */
+window.addEventListener("hcu:locked", () => { $("lockScreen").hidden = false; });
+window.addEventListener("hcu:signout", () => { $("lockScreen").hidden = true; });

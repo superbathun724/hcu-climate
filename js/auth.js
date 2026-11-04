@@ -206,7 +206,7 @@ async function resend() {
 /* ---------- 로그인된 뒤 ---------- */
 async function onSignedIn() {
   const { data, error } = await db.from("profiles")
-    .select("class_id, club_id, clubs(name)")
+    .select("class_id, club_id, clubs(name), classes(region_id)")
     .maybeSingle();
 
   if (error || !data) {
@@ -217,7 +217,8 @@ async function onSignedIn() {
 
   // 관리자 링크는 서버가 관리자라고 할 때만 보인다. 숨겨도 관리 기능 자체는 서버가 막는다.
   const { data: admin } = await db.rpc("is_admin");
-  const profile = { classId: data.class_id, clubId: data.club_id, clubName: data.clubs?.name ?? "", isAdmin: admin === true };
+  const profile = { classId: data.class_id, clubId: data.club_id, clubName: data.clubs?.name ?? "",
+                    regionId: data.classes?.region_id ?? null, isAdmin: admin === true };
   window.hcuProfile = profile;
   $("chipTxt").textContent = `${profile.classId}반 · ${profile.clubName}`;
   $("adminLink").hidden = !profile.isAdmin;
@@ -261,6 +262,7 @@ $("backLink").addEventListener("click", e => { e.preventDefault(); setMode("logi
 $("gate").addEventListener("submit", submit);
 $("resendBtn").addEventListener("click", resend);
 $("logoutBtn").addEventListener("click", e => { e.preventDefault(); db.auth.signOut(); });
+$("lockLogout").addEventListener("click", e => { e.preventDefault(); db.auth.signOut(); });
 
 readLinkError();
 loadChoices();
