@@ -145,6 +145,16 @@ section.on{display:block}
 .qres.bad{background:#FDEDEA;color:#9b2c1f}
 .qres .ans{font-weight:500;margin-top:4px;color:var(--ink)}
 .qcard .big{font-size:2.4rem;font-weight:800;text-align:center;margin-top:8px}
+#stSetup .t{font-weight:800;font-size:.95rem}
+.picks{display:grid;gap:6px}
+.picks.lvpick{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}
+.picks.cnt{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pick{display:flex;flex-direction:column;align-items:center;gap:1px;border:1.5px solid var(--mist);background:var(--paper);border-radius:12px;padding:8px 4px;cursor:pointer}
+.pick b{font-size:.92rem}
+.pick small{font-size:.68rem;color:var(--sub)}
+.pick span{font-size:.75rem;font-weight:700;color:var(--brand)}
+.pick.on{border-color:var(--brand);background:#EDF3FB}
+.pick:disabled{opacity:.4;cursor:default}
 .wlist{display:flex;flex-direction:column;gap:6px;padding-bottom:16px}
 .wrow{background:#fff;border-radius:12px;padding:10px 12px}
 .wrow .w{font-family:var(--head);font-weight:800;font-size:1rem}
