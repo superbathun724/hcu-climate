@@ -1,5 +1,5 @@
 /* ==========================================================
-   admin.js — 관리 화면: 단어 CSV 올리기(덮어쓰기), 단어장 이름 바꾸기·숨기기·삭제
+   admin.js — 관리 화면: 단어 CSV 올리기(덮어쓰기), 단어장 이름 바꾸기·숨기기·삭제, 건의함 내보내기
    모든 변경은 서버 함수(sql/02_words.sql 의 admin_…)로만 한다.
    그 함수들이 관리자인지 다시 확인하므로, 이 파일을 고쳐도 학생은 아무것도 못 바꾼다.
    ========================================================== */
@@ -144,6 +144,42 @@ $("upGo").addEventListener("click", async () => {
   resetUpload();
   await loadAdminSets();
   changed();
+});
+
+/* ---------- 건의함 내보내기 (학교에 전달할 때) ----------
+   글쓴이는 서버가 아예 돌려주지 않으므로 내보내기에도 없다. */
+const deFormula = v => /^[=+\-@\t\r]/.test(v) ? "'" + v : v;          // 엑셀 수식 방지 (voca-web 과 같음)
+const cell = v => { const s = deFormula(String(v ?? "")); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const day = iso => iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "";
+
+async function suggestions() {
+  const { data, error } = await db.rpc("list_suggestions", { p_sort: "top" });
+  if (error) { say($("exMsg"), serverMsg(error)); return null; }
+  return data;
+}
+
+$("exCsv").addEventListener("click", async () => {
+  const rows = await suggestions(); if (!rows) return;
+  const head = ["번호", "올린 때", "건의", "공감", "답변", "답변한 때", "숨김"];
+  const lines = [head.join(","), ...rows.map(r =>
+    [r.id, day(r.created_at), r.body, r.votes, r.answer ?? "", day(r.answered_at), r.hidden ? "숨김" : ""].map(cell).join(","))];
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `건의함_${new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}.csv`;
+  document.body.appendChild(a);          // 문서에 붙여야 파일 이름(download)이 지켜지는 브라우저가 있다
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  say($("exMsg"), `${rows.length}개를 내려받았어요(공감순).`, "good");
+});
+
+$("exCopy").addEventListener("click", async () => {
+  const rows = await suggestions(); if (!rows) return;
+  const text = rows.filter(r => !r.hidden).map((r, i) =>
+    `${i + 1}. ${r.body} (공감 ${r.votes})${r.answer ? `\n   → 답변: ${r.answer}` : ""}`).join("\n");
+  try { await navigator.clipboard.writeText(text); say($("exMsg"), `숨기지 않은 글 ${rows.filter(r => !r.hidden).length}개를 복사했어요.`, "good"); }
+  catch { say($("exMsg"), "복사하지 못했어요. CSV 내려받기를 써 주세요."); }
 });
 
 /* 관리자에게만 목록을 읽는다. 학생에게는 관리 화면 링크도 안 보인다. */

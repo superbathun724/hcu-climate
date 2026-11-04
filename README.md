@@ -13,19 +13,38 @@
 | 무엇 | 어디서 | 바꾼 점 |
 |---|---|---|
 | 화면 구조(상단바·탭·목록 행), 색·글꼴 토큰, 울산 장면 | un-summit `index.html`·`styles.css` | 도시 선택 → 반·동아리, 영어 UI → 한국어 |
-| 재난 이벤트(빨간 고정, 2배), 대비율 50% 선, 매일 감소 | un-summit `app.js` (방벽·재난 이벤트) | 기기마다 따로 → 서버가 전교에 하나로. 대비율은 바깥 지역에만 |
+| 대비율 50% 선, 20코인 = 1% | un-summit `app.js` (방벽, DEF_PER_PCT) | 대비율은 바깥 지역에만, 서버가 계산 |
 | 1인당 평균 순위 | un-summit 하루 보드 | 도시 → 반·동아리 두 개 |
 | 로그인, 계정별 데이터, publishable 키 규칙 | voca-web `js/auth.js`·`js/config.js` | 새 Supabase 프로젝트, 학교 도메인 검사 추가 |
-| 단어 단계(SRS 1·3·7·16·35·90일), CSV 형식, 채점 | voca-web `js/srs.js`·`js/csv.js`·`js/grade.js` | 단계별 코인, 서버 채점 |
-| 서버 함수 안에서만 값이 바뀌는 구조 | voca-web `execute_trade()` | 코인·대비율에 적용 |
+| 단어 단계, 단계별 문제 유형, CSV 형식, 채점 | voca-web `js/quiz.js`·`js/csv.js`·`js/grade.js` | 복습 날짜 대신 고른 단어장으로 공부, 자동 채점 유형만, 단계별 코인, 서버 채점 |
+| 서버 함수 안에서만 값이 바뀌는 구조, 비밀 키 서버 함수 | voca-web `execute_trade()`·`functions/api/trade.js` | 코인·대비율·단어 채점에 적용 |
 
 가져오지 않은 것: un-summit 의 Voice 탭(건의함이 대신함), 광고, 가짜 외부 구호·가짜 순위, 업그레이드.
 
-## DB 설정 (처음 한 번)
+## DB 설정
 
-1. Supabase → SQL Editor → `sql/01_schema.sql` 붙여 넣고 Run
-2. 이어서 `sql/02_words.sql` 붙여 넣고 Run
-3. 관리자 계정으로 가입·인증을 마친 뒤, 그 파일 맨 아래의 관리자 등록 SQL 을 이메일만 바꿔 실행
+Supabase → SQL Editor 에서 `sql/` 파일을 **번호 순서대로** 붙여 넣고 Run. 몇 번을 돌려도 같은 상태가 된다.
+
+| 파일 | 내용 |
+|---|---|
+| `01_schema.sql` | 반·동아리·지역, 프로필, 가입 검사(학교 도메인), 관리자 |
+| `02_words.sql` | 단어장·단어·진도, 관리자 단어장 함수(올리기·덮어쓰기·이름·숨기기·삭제) |
+| `03_game.sql` | 지갑, 탭(구간마다 효율 절반, 속도 제한), 코인 보내기, 반·동아리 순위 |
+| `04_study.sql` | 단어 공부 기록과 코인(같은 단어는 하루 한 번), 서버 채점용 권한 |
+| `05_voice.sql` | 건의함: 글, 공감, 학생회 답변, 숨기기 |
+
+관리자 추가는 `01_schema.sql` 맨 아래 SQL 을 이메일만 바꿔 실행한다. 여러 명이면 `where email in ('a@hcu.hs.kr', 'b@hcu.hs.kr')`.
+
+## Cloudflare 환경 변수 (단어 채점에 필요)
+
+Workers & Pages → hcu-climate → Settings → Variables and Secrets (Production)
+
+| 이름 | 값 | 종류 |
+|---|---|---|
+| `SUPABASE_URL` | `https://ktsxgtnontktkrxdkfbw.supabase.co` | Text |
+| `SUPABASE_SERVICE_KEY` | Supabase → Settings → API Keys 의 `sb_secret_…` | **Secret** |
+
+넣은 뒤에는 한 번 다시 배포해야 적용된다(빈 커밋 push 또는 Deployments → Retry).
 
 ## Supabase 대시보드 설정 (처음 한 번)
 
@@ -40,17 +59,31 @@
 
 | 파일 | 내용 |
 |---|---|
-| `index.html` `styles.css` | 화면 |
-| `app.js` | 게임 화면 (아직 예시 숫자, 3단계부터 서버로) |
-| `js/config.js` | Supabase 주소와 publishable 키 |
-| `js/auth.js` | 가입·로그인·로그아웃·비밀번호 찾기, 반·동아리 표시 |
-| `js/ui.js` | 여러 화면이 같이 쓰는 도구 (글자 이스케이프, 안내 상자, 서버 오류 문구) |
-| `js/csv.js` | 단어 CSV 읽기 (voca-web 형식 그대로) |
-| `js/words.js` | 단어 탭: 단어장 목록·보기 (학생은 보기만) |
-| `js/admin.js` | 관리: CSV 올리기·덮어쓰기, 단어장 이름·숨기기·삭제 |
+| `index.html` `styles.css` | 화면 (폰·태블릿·PC 적응형) |
 | `privacy.html` | 개인정보처리방침 (초안) |
-| `sql/01_schema.sql` | 반·동아리·지역, 프로필, 가입 검사, 관리자 |
-| `sql/02_words.sql` | 단어장·단어·진도 표, 관리자 단어장 함수 |
+| `js/config.js` | Supabase 주소와 publishable 키 |
+| `js/ui.js` | 공용 도구: 글자 이스케이프, 안내, 코인 칩, 알림 줄 |
+| `js/nav.js` | 탭 전환 |
+| `js/auth.js` | 가입·로그인·로그아웃·비밀번호 찾기 |
+| `js/game.js` | 게임 탭: 탭 → 서버(2초마다 모아서) |
+| `js/words.js` | 단어 탭: 단어장 목록·보기 |
+| `js/study.js` | 고른 단어장으로 공부 (20개씩) |
+| `js/quiz-core.js` | 단계별 문제 유형과 채점 — 브라우저와 서버가 같이 씀 |
+| `js/grade.js` | 한국어 뜻 채점 규칙 (voca-web 그대로) |
+| `js/csv.js` | 단어 CSV 읽기 (voca-web 형식 그대로) |
+| `js/send.js` | 지원 탭: 바깥 지역에 코인 보내기 |
+| `js/rank.js` | 순위 탭: 반·동아리 1인당 평균 |
+| `js/voice.js` | 건의함 |
+| `js/admin.js` | 관리: 단어장, 건의함 내보내기 |
+| `functions/api/answer.js` | 단어 채점 서버 함수 (Cloudflare Pages Functions) |
+| `sql/01~05` | DB |
+
+## 아직 정하지 않은 것
+
+- 순위 기간: 지금은 누적 (`03_game.sql` 의 `rank_classes`·`rank_clubs`)
+- 재난 이벤트(빨간 고정·2배): 아직 없음 (`send_coins` 의 `v_mult`)
+- 대비율 매일 감소: 아직 없음
+- 20코인 = 대비율 1% (`coins_per_pct`, un-summit 값을 임시로 씀)
 
 ## 지킬 것
 

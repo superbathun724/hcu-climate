@@ -229,6 +229,7 @@ async function onSignedIn() {
 
 function onSignedOut() {
   window.hcuProfile = null;
+  window.dispatchEvent(new Event("hcu:signout"));
   $("chipTxt").textContent = "";
   $("adminLink").hidden = true;
   $("gate").classList.add("on");

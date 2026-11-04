@@ -68,20 +68,21 @@
     <div class="brand">hcu-climate</div>
     <div class="hdr">
       <span class="chip"><span class="dot"></span><span id="chipTxt"></span></span>
-      <div class="coins" id="coins">186</div>
+      <div class="coins" id="coins" title="내 코인">0</div>
     </div>
   </header>
 
   <nav id="tabs">
     <button class="on" data-tab="game">게임</button>
     <button data-tab="word">단어</button>
-    <button data-tab="send" class="alert">지원</button>
+    <button data-tab="send">지원</button>
     <button data-tab="rank">순위</button>
     <button data-tab="voice">건의함</button>
   </nav>
 
-  <div id="ticker">우리 반이 돕는 필리핀의 대비율이 오늘 4% 올랐어요.</div>
+  <div id="ticker" aria-live="polite"></div>
 
+  <main>
   <!-- ===== 게임 ===== -->
   <section id="game" class="on">
     <div id="scene">
@@ -102,36 +103,33 @@
       <div id="hint">화면을 누르면 공장 연기가 줄어요</div>
     </div>
 
-    <div id="meters">
-      <div class="meter">
-        <small>오늘 누른 횟수</small><b id="taps">412</b>
-        <div class="bar"><i id="bandBar"></i></div>
-        <small id="bandTxt">488번 더 누르면 효율이 바뀌어요</small>
+    <div class="side">
+      <div id="meters">
+        <div class="meter">
+          <small>오늘 누른 횟수</small><b id="taps">0</b>
+          <div class="bar"><i id="bandBar"></i></div>
+          <small id="bandTxt"></small>
+        </div>
+        <div class="meter">
+          <small>지금 한 번 누를 때</small><b id="rate">1코인</b>
+          <small>내일 아침 다시 1코인</small>
+        </div>
       </div>
-      <div class="meter">
-        <small>지금 한 번 누를 때</small><b id="rate">0.5코인</b>
-        <small>내일 아침 다시 1코인</small>
-      </div>
-    </div>
-    <div class="pad">
-      <p class="note">많이 누를수록 한 번에 받는 코인이 줄어요. 단어 공부로 받는 코인은 줄지 않아요.</p>
-      <div class="band">
-        <div><span>1~300번</span><b>1</b></div>
-        <div class="now"><span>~900번</span><b>0.5</b></div>
-        <div><span>~2,100번</span><b>0.25</b></div>
-        <div><span>그 뒤</span><b>계속 절반</b></div>
+      <div class="pad">
+        <p class="note">많이 누를수록 한 번에 받는 코인이 줄어요. 단어 공부로 받는 코인은 줄지 않아요.</p>
+        <div class="band">
+          <div><span>1~300번</span><b>1</b></div>
+          <div><span>~900번</span><b>0.5</b></div>
+          <div><span>~2,100번</span><b>0.25</b></div>
+          <div><span>그 뒤</span><b>계속 절반</b></div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ===== 단어 ===== -->
   <section id="word">
-    <div class="row hero">
-      <div><div class="t">오늘 복습할 단어 23개</div><div class="d">복습할 때가 된 단어와 처음 보는 단어에서만 코인이 나와요.</div></div>
-      <button class="btn coin" data-open="quiz">시작</button>
-    </div>
-
-    <h3>단계별 코인</h3>
+    <p class="note">단어장을 골라 공부해요. 맞히면 한 단계 오르고 그 단계만큼 코인을 받아요. 같은 단어는 하루에 한 번만 코인이 나와요. 틀리면 1단계로 돌아가요.</p>
     <div class="lv">
       <div><span>1단계</span><b>1</b><small>뜻</small></div>
       <div><span>2단계</span><b>2</b><small>철자</small></div>
@@ -140,69 +138,71 @@
       <div><span>5단계</span><b>5</b><small>예문</small></div>
       <div><span>6단계</span><b>8</b><small>종합</small></div>
     </div>
-    <p class="note">맞히면 다음 단계로, 틀리면 1단계로 돌아가요. 표현·예문 해석을 스스로 채점한 경우에는 코인이 없어요.</p>
 
     <h3>단어장</h3>
-    <div id="sets"><p class="note">불러오는 중…</p></div>
+    <div id="sets" class="grid"><p class="note">불러오는 중…</p></div>
 
     <!-- 단어장 보기: 학생은 보기만 한다 -->
-    <div class="quiz" id="setView" hidden>
+    <div class="panel" id="setView" hidden>
       <div class="qhead"><span id="setViewName"></span><button class="x" data-close="setView" aria-label="닫기">×</button></div>
       <div id="setViewList" class="wlist"></div>
     </div>
 
-    <!-- 테스트 화면: 단어 탭 안에서 열린다 -->
-    <div class="quiz" id="quiz" hidden>
-      <div class="qhead"><span>Day 03 · 4 / 23</span><button class="x" data-close="quiz" aria-label="닫기">×</button></div>
-      <div class="qword">fierce</div>
-      <div class="qtype">1단계 · 뜻 쓰기 · 맞히면 1코인</div>
-      <input placeholder="뜻을 입력하세요">
-      <div class="qbtns"><button class="btn ghost">모르겠어요</button><button class="btn">확인</button></div>
+    <!-- 공부: js/study.js 가 채운다 -->
+    <div class="panel" id="study" hidden>
+      <div class="qhead"><span id="stHead"></span><button class="x" id="stClose" aria-label="그만하기">×</button></div>
+      <div class="pbar"><i id="stBar"></i></div>
+      <form id="stCard" class="qcard" novalidate>
+        <div class="qtype" id="stType"></div>
+        <div class="qword" id="stBig"></div>
+        <div class="qsub" id="stSub"></div>
+        <input id="stInput" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="qbtns"><button type="button" class="btn ghost" id="stSkip">모르겠어요</button><button type="submit" class="btn" id="stGo">확인</button></div>
+        <div class="qres" id="stRes" hidden></div>
+        <button type="button" class="btn wide" id="stNext" hidden>다음</button>
+      </form>
+      <div id="stDone" class="qcard" hidden></div>
     </div>
   </section>
 
   <!-- ===== 지원 ===== -->
   <section id="send">
-    <p class="note">대비율이 50%를 넘으면 그 지역은 재난을 버텨요. 대비율은 매일 조금씩 내려가니 꾸준히 도와야 해요.</p>
-    <div id="sendList"></div>
+    <p class="note">코인은 울산에 쓸 수 없어요. 재난 위험이 큰 지역에 보내 대비율을 올려요. 20코인이 대비율 1%이고, 50%를 넘으면 그 지역은 재난을 버텨요.</p>
+    <div id="sendList" class="grid"><p class="note">불러오는 중…</p></div>
   </section>
 
   <!-- ===== 순위 ===== -->
   <section id="rank">
-    <div class="row prog">
-      <small>우리 반이 돕는 곳 · <b>필리핀</b></small>
-      <div class="big">대비율 43%</div>
-      <div class="bar"><i style="width:43%"></i><span class="safe"></span></div>
-      <small>50%까지 7% 남았어요 · 오늘 우리 반 지원 1,240코인</small>
-    </div>
-
+    <div class="row prog" id="myRegion"></div>
     <div class="seg" id="rankSeg">
       <button class="on" data-r="class">반 순위</button>
       <button data-r="club">동아리 순위</button>
     </div>
-    <p class="note">한 사람당 평균 지원 코인으로 순위를 매겨요. 인원이 적어도 1등을 할 수 있어요.</p>
-    <div id="rankList"></div>
+    <p class="note">지금까지 보낸 코인의 한 사람당 평균으로 순위를 매겨요. 가입한 사람 수로 나누니 인원이 적어도 1등을 할 수 있어요.</p>
+    <div id="rankList"><p class="note">불러오는 중…</p></div>
   </section>
 
   <!-- ===== 건의함 ===== -->
   <section id="voice">
-    <div class="row write">
+    <form class="row write" id="vForm" novalidate>
       <div class="t">학교에 건의하기</div>
-      <textarea rows="3" maxlength="300" placeholder="학교에 바라는 점을 적어 주세요"></textarea>
-      <div class="d">다른 학생에게는 이름 없이 보여요. 이름, 연락처, 특정한 사람 이야기는 적지 마세요.</div>
-      <button class="btn">올리기</button>
-    </div>
+      <textarea id="vBody" rows="3" maxlength="300" placeholder="학교에 바라는 점을 적어 주세요"></textarea>
+      <div class="d">다른 학생에게는 이름 없이 보여요. 이름, 연락처, 특정한 사람 이야기는 적지 마세요. 하루에 3개까지.</div>
+      <button type="submit" class="btn" id="vSend">올리기</button>
+      <p class="msg" id="vMsg" hidden></p>
+    </form>
 
     <div class="seg small" id="voiceSeg">
-      <button class="on">공감순</button><button>최신순</button><button>답변 완료</button>
+      <button class="on" data-s="top">공감순</button><button data-s="new">최신순</button><button data-s="answered">답변 완료</button>
     </div>
-    <div id="posts"></div>
+    <div id="posts"><p class="note">불러오는 중…</p></div>
   </section>
 
-  <!-- ===== 관리 (관리자 계정에서만 서버가 연다) ===== -->
+  <!-- ===== 관리 (관리자 계정에서만) ===== -->
   <section id="admin">
     <h3>관리</h3>
     <!-- 관리 기능은 전부 서버 함수(admin_…)가 관리자인지 다시 확인한다. 이 화면을 열어도 학생은 아무것도 못 바꾼다. -->
+    <div class="grid">
     <div class="row col" id="upCard">
       <div class="t">단어 CSV 올리기</div>
       <div class="d">voca-web과 같은 형식이에요. 한 번에 1,000줄까지. 이름이 같은 단어장이 있으면 덮어써요.</div>
@@ -225,28 +225,29 @@
     </div>
 
     <div class="row col">
-      <div class="t">건의 답변</div>
-      <div class="d">공감이 많은 글: “급식실 줄이 너무 길어요” (공감 87)</div>
-      <textarea rows="2" placeholder="학생회장이 받아 온 답변"></textarea>
-      <div class="frow"><button class="btn ghost">숨기기</button><button class="btn">답변 달기</button></div>
+      <div class="t">건의함</div>
+      <div class="d">답변 달기와 숨기기는 건의함 탭의 각 글 아래에서 해요. 숨긴 글은 관리자에게만 보여요. 내보내기에는 글쓴이가 들어가지 않아요.</div>
+      <div class="frow"><button class="btn" id="exCsv">CSV 내려받기</button><button class="btn ghost" id="exCopy">전체 복사</button></div>
+      <p class="msg" id="exMsg" hidden></p>
     </div>
-    <div class="row col">
-      <div class="t">내보내기</div>
-      <div class="frow"><button class="btn">CSV 내려받기</button><button class="btn ghost">전체 복사</button></div>
     </div>
   </section>
+  </main>
 
   <footer>
     <a href="privacy.html">개인정보처리방침</a><span id="adminLink" hidden> · <a href="#" data-open="admin">관리자</a></span> · <a href="#" id="logoutBtn">로그아웃</a>
   </footer>
-
-  <div id="mockTag">게임 숫자는 아직 예시</div>
 </div>
 <!-- supabase-js 는 window.supabase 를 만든다. js/config.js 가 그것을 쓰므로 먼저 읽는다. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="app.js"></script>
+<script type="module" src="js/nav.js"></script>
 <script type="module" src="js/auth.js"></script>
+<script type="module" src="js/game.js"></script>
 <script type="module" src="js/words.js"></script>
+<script type="module" src="js/study.js"></script>
+<script type="module" src="js/send.js"></script>
+<script type="module" src="js/rank.js"></script>
+<script type="module" src="js/voice.js"></script>
 <script type="module" src="js/admin.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* ==========================================================
-   words.js — 단어 탭: 단어장 목록과 단어 보기 (학생은 보기만)
+   words.js — 단어 탭: 단어장 목록과 단어 보기 (학생은 보기만). 공부는 js/study.js
    숨긴 단어장은 서버(RLS)가 학생에게 아예 보내지 않는다.
    관리자에게는 보이고, "숨김" 표시가 붙는다.
    ========================================================== */
@@ -18,7 +18,10 @@ export async function loadSets() {
     <div class="row">
       <div class="m"><div class="t">${esc(s.name)}${s.hidden ? ` <span class="tag hid">숨김</span>` : ""}</div>
         <div class="d">${s.words?.[0]?.count ?? 0}단어</div></div>
-      <button class="btn ghost" data-view="${s.id}" data-name="${esc(s.name)}">보기</button>
+      <div class="btns">
+        <button class="btn ghost" data-view="${s.id}" data-name="${esc(s.name)}">보기</button>
+        <button class="btn coin" data-study="${s.id}" data-name="${esc(s.name)}">공부하기</button>
+      </div>
     </div>`).join("");
 }
 
@@ -47,8 +50,10 @@ async function openSet(id, name) {
 }
 
 $("sets").addEventListener("click", e => {
-  const b = e.target.closest("[data-view]");
-  if (b) openSet(b.dataset.view, b.dataset.name);
+  const v = e.target.closest("[data-view]");
+  if (v) openSet(v.dataset.view, v.dataset.name);
+  const st = e.target.closest("[data-study]");
+  if (st) window.dispatchEvent(new CustomEvent("hcu:study", { detail: { id: Number(st.dataset.study), name: st.dataset.name } }));
 });
 
 onProfile(() => loadSets());

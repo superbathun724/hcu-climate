@@ -31,3 +31,31 @@ export function onProfile(fn) {
   if (window.hcuProfile) fn(window.hcuProfile);
   window.addEventListener("hcu:profile", e => fn(e.detail));
 }
+
+/* ---------- 코인 (상단 노란 칩) ----------
+   여러 화면이 서버에서 받은 잔액을 여기로 넣는다. 화면에는 정수만 보인다. */
+let balance = 0;
+export function setBalance(v) {
+  balance = Number(v) || 0;
+  $("coins").textContent = Math.floor(balance).toLocaleString();
+}
+export const getBalance = () => balance;
+
+/* ---------- 한 줄 알림 (탭 밑) ---------- */
+let tickTimer = 0;
+export function tick(text, kind = "") {
+  const t = $("ticker");
+  t.textContent = text;
+  t.className = kind;
+  clearTimeout(tickTimer);
+  if (text) tickTimer = setTimeout(() => { t.textContent = ""; t.className = ""; }, 6000);
+}
+
+/** 한국 날짜 "YYYY-MM-DD" (서버 kst_today() 와 같은 날짜) */
+export const kstToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+
+/** 소수 한 자리까지, 끝의 .0 은 뗀다 */
+export const num1 = v => (Math.round(Number(v) * 10) / 10).toLocaleString();
+
+/* 로그아웃하면 알림 줄을 비운다(다음 사람에게 앞사람 알림이 남지 않게) */
+window.addEventListener("hcu:signout", () => tick(""));
