@@ -168,3 +168,6 @@ footer{margin-top:auto;padding:12px 16px 18px;font-size:12px;color:var(--sub);te
 #gate .btn.wide + .btn.wide{margin-top:8px}
 #gate .btn:disabled{opacity:.5}
 [hidden]{display:none !important}
+#gate .gtitle{font-size:18px;margin:4px 0 2px}
+#gate .links{display:flex;justify-content:center;margin-top:12px}
+#gate .links a{font-weight:600}

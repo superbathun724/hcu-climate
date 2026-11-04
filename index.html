@@ -28,10 +28,21 @@
       <button type="button" data-g="join">회원가입</button>
     </div>
 
-    <label for="mailId">학교 이메일</label>
-    <div class="mail"><input id="mailId" placeholder="아이디" autocomplete="username" autocapitalize="off" spellcheck="false"><span>@hcu.hs.kr</span></div>
-    <label for="pw">비밀번호</label>
-    <input id="pw" type="password" placeholder="8자 이상" autocomplete="current-password">
+    <!-- 비밀번호 찾기·새 비밀번호 화면에서는 탭 대신 이 제목이 보인다 -->
+    <h2 class="gtitle" id="gateTitle" hidden></h2>
+
+    <div id="mailRow">
+      <label for="mailId">학교 이메일</label>
+      <div class="mail"><input id="mailId" placeholder="아이디" autocomplete="username" autocapitalize="off" spellcheck="false"><span>@hcu.hs.kr</span></div>
+    </div>
+    <div id="pwRow">
+      <label for="pw" id="pwLbl">비밀번호</label>
+      <input id="pw" type="password" placeholder="8자 이상" autocomplete="current-password">
+    </div>
+    <div id="pw2Row" hidden>
+      <label for="pw2">새 비밀번호 한 번 더</label>
+      <input id="pw2" type="password" placeholder="같은 비밀번호" autocomplete="new-password">
+    </div>
 
     <div id="joinOnly" hidden>
       <label for="selClass">반</label>
@@ -45,6 +56,10 @@
     <p class="msg" id="gateMsg" hidden></p>
     <button type="button" class="btn ghost wide" id="resendBtn" hidden>확인 메일 다시 보내기</button>
     <button type="submit" class="btn wide" id="gateBtn">Start</button>
+    <p class="fine links">
+      <a href="#" id="forgotLink">비밀번호를 잊었어요</a>
+      <a href="#" id="backLink" hidden>← 로그인으로 돌아가기</a>
+    </p>
     <p class="fine" id="gateFine">학교 이메일로만 가입할 수 있어요. 가입하면 확인 메일이 가요.</p>
   </form>
 

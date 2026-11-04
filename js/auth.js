@@ -10,7 +10,7 @@
 import { db, SCHOOL_DOMAIN } from "./config.js";
 
 const $ = id => document.getElementById(id);
-let mode = "login";          // "login" | "join"
+let mode = "login";          // "login" | "join" | "forgot" | "reset"
 let lastEmail = "";          // 확인 메일 다시 보내기용
 
 /* ---------- 안내 문구 ---------- */
@@ -26,10 +26,15 @@ function korean(err) {
   const s = `${err?.code || ""} ${err?.message || ""}`.toLowerCase();
   if (s.includes("invalid login credentials"))      return "이메일 또는 비밀번호가 맞지 않아요.";
   if (s.includes("email not confirmed"))            return "아직 메일 확인을 안 했어요. 메일함(스팸함 포함)에서 확인 링크를 눌러 주세요.";
-  if (s.includes("rate limit") || s.includes("429")) return "요청이 너무 많아요. 잠시 뒤에 다시 해 주세요.";
+  if (s.includes("rate limit") || s.includes("429") || s.includes("for security purposes"))
+    return "요청이 너무 많아요. 1분쯤 뒤에 다시 해 주세요.";
+  if (s.includes("same_password") || s.includes("should be different"))
+    return "지금 쓰는 비밀번호와 다른 비밀번호를 써 주세요.";
+  if (s.includes("session") && (s.includes("missing") || s.includes("expired")))
+    return "재설정 링크가 만료됐어요. 비밀번호 찾기를 처음부터 다시 해 주세요.";
   // 메일 서버(SMTP) 설정 문제. 학생이 고칠 수 있는 게 아니라 관리자가 봐야 한다.
   if (s.includes("sending") && s.includes("email"))
-    return "확인 메일을 보내지 못했어요. 잠시 뒤에 다시 해 보고, 계속 안 되면 관리자에게 알려 주세요.";
+    return "메일을 보내지 못했어요. 잠시 뒤에 다시 해 보고, 계속 안 되면 관리자에게 알려 주세요.";
   if (s.includes("password") && s.includes("least")) return "비밀번호는 8자 이상이어야 해요.";
   if (s.includes("weak"))                           return "더 어려운 비밀번호를 써 주세요.";
   if (s.includes("database error") || s.includes("p0001"))
@@ -50,16 +55,38 @@ function emailFromInput() {
   return { email: id + suffix };
 }
 
-/* ---------- 로그인 / 가입 전환 ---------- */
+/* ---------- 화면 모드 ----------
+   login  : 이메일 + 비밀번호
+   join   : 이메일 + 비밀번호 + 반·동아리·동의
+   forgot : 이메일만 → 재설정 메일
+   reset  : 메일 링크로 돌아온 뒤 새 비밀번호 두 번 */
+const BUTTON = { login: "Start", join: "Join", forgot: "재설정 메일 보내기", reset: "Save" };
 function setMode(next) {
   mode = next;
+  const tabs = mode === "login" || mode === "join";
   document.querySelectorAll("#gateSeg button")
     .forEach(b => b.classList.toggle("on", b.dataset.g === mode));
-  const join = mode === "join";
-  $("joinOnly").hidden = !join;
-  $("gateBtn").textContent = join ? "Join" : "Start";
-  $("pw").autocomplete = join ? "new-password" : "current-password";
+  $("gateSeg").hidden = !tabs;
+  $("gateTitle").hidden = tabs;
+  $("gateTitle").textContent = mode === "forgot" ? "비밀번호 찾기" : mode === "reset" ? "새 비밀번호 정하기" : "";
+
+  $("mailRow").hidden = mode === "reset";
+  $("pwRow").hidden = mode === "forgot";
+  $("pw2Row").hidden = mode !== "reset";
+  $("pwLbl").textContent = mode === "reset" ? "새 비밀번호" : "비밀번호";
+  $("pw").autocomplete = mode === "login" ? "current-password" : "new-password";
+  $("joinOnly").hidden = mode !== "join";
+
+  $("forgotLink").hidden = mode !== "login";
+  $("backLink").hidden = mode !== "forgot";
+  $("gateFine").textContent =
+    mode === "forgot" ? "가입한 학교 이메일로 재설정 링크를 보내요. 스팸함도 확인해 주세요." :
+    mode === "reset"  ? "저장하면 바로 로그인돼요." :
+    `학교 이메일로만 가입할 수 있어요. 가입하면 확인 메일이 가요.`;
+
+  $("gateBtn").textContent = BUTTON[mode];
   $("resendBtn").hidden = true;
+  $("pw").value = $("pw2").value = "";
   say("");
 }
 
@@ -84,8 +111,12 @@ const escapeHtml = s => String(s).replace(/[&<>"']/g, ch =>
 /* ---------- 보내기 ---------- */
 async function submit(e) {
   e.preventDefault();
+  if (mode === "reset") return saveNewPassword();
+
   const { email, error } = emailFromInput();
   if (error) return say(error);
+  if (mode === "forgot") return sendReset(email);
+
   const password = $("pw").value;
   if (password.length < 8) return say("비밀번호는 8자 이상이어야 해요.");
   lastEmail = email;
@@ -131,6 +162,36 @@ async function submit(e) {
   }
 }
 
+/* ---------- 비밀번호 찾기 ---------- */
+async function sendReset(email) {
+  const btn = $("gateBtn");
+  btn.disabled = true;
+  const { error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: location.origin + location.pathname,
+  });
+  btn.disabled = false;
+  if (error) return say(korean(error));
+  // 가입하지 않은 이메일이어도 같은 문구. 누가 가입했는지 알아내는 데 쓰이지 않게.
+  say(`${email} 로 가입한 계정이 있으면 재설정 메일이 가요. 메일함(스팸함 포함)을 확인해 주세요.`, "good");
+}
+
+let recovering = false;      // 재설정 링크로 들어온 상태. 이때는 로그인돼도 게임으로 안 넘어간다.
+
+async function saveNewPassword() {
+  const pw = $("pw").value, pw2 = $("pw2").value;
+  if (pw.length < 8) return say("비밀번호는 8자 이상이어야 해요.");
+  if (pw !== pw2) return say("두 비밀번호가 달라요.");
+  const btn = $("gateBtn");
+  btn.disabled = true;
+  const { error } = await db.auth.updateUser({ password: pw });
+  btn.disabled = false;
+  if (error) return say(korean(error));
+  recovering = false;
+  signedIn = true;           // 곧 올 USER_UPDATED 이벤트가 onSignedIn 을 한 번 더 부르지 않게
+  setMode("login");
+  onSignedIn();
+}
+
 async function resend() {
   if (!lastEmail) return;
   $("resendBtn").disabled = true;
@@ -174,9 +235,17 @@ function onSignedOut() {
   $("gate").classList.add("on");
 }
 
-/* 메일 링크가 만료됐거나 이미 쓰인 경우, 주소 뒤에 오류가 붙어서 돌아온다. */
+/* 메일 링크로 돌아오면 주소 뒤(#)에 정보가 붙는다.
+   - type=recovery : 비밀번호 재설정 링크 → 새 비밀번호 화면
+   - error=…       : 링크가 만료됐거나 이미 쓰임
+   supabase-js 가 이 # 를 곧 지우므로, 모듈이 시작되자마자 먼저 읽는다. */
 function readLinkError() {
   const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("type") === "recovery" && h.get("access_token")) {
+    recovering = true;
+    setMode("reset");
+    return;
+  }
   if (!h.get("error")) return;
   setMode("login");
   say(/expired|invalid/i.test(h.get("error_description") || "")
@@ -187,6 +256,8 @@ function readLinkError() {
 
 /* ---------- 시작 ---------- */
 document.querySelectorAll("#gateSeg button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.g)));
+$("forgotLink").addEventListener("click", e => { e.preventDefault(); setMode("forgot"); });
+$("backLink").addEventListener("click", e => { e.preventDefault(); setMode("login"); });
 $("gate").addEventListener("submit", submit);
 $("resendBtn").addEventListener("click", resend);
 $("logoutBtn").addEventListener("click", e => { e.preventDefault(); db.auth.signOut(); });
@@ -195,7 +266,9 @@ readLinkError();
 loadChoices();
 
 let signedIn = null;       // 같은 상태로 두 번 그리지 않게
-db.auth.onAuthStateChange((_event, session) => {
+db.auth.onAuthStateChange((event, session) => {
+  if (event === "PASSWORD_RECOVERY") { recovering = true; setMode("reset"); }
+  if (recovering) { $("gate").classList.add("on"); return; }   // 새 비밀번호를 정할 때까지 게이트에 머문다
   const now = !!session;
   if (now === signedIn) return;
   signedIn = now;
