@@ -27,6 +27,9 @@ function korean(err) {
   if (s.includes("invalid login credentials"))      return "이메일 또는 비밀번호가 맞지 않아요.";
   if (s.includes("email not confirmed"))            return "아직 메일 확인을 안 했어요. 메일함(스팸함 포함)에서 확인 링크를 눌러 주세요.";
   if (s.includes("rate limit") || s.includes("429")) return "요청이 너무 많아요. 잠시 뒤에 다시 해 주세요.";
+  // 메일 서버(SMTP) 설정 문제. 학생이 고칠 수 있는 게 아니라 관리자가 봐야 한다.
+  if (s.includes("sending") && s.includes("email"))
+    return "확인 메일을 보내지 못했어요. 잠시 뒤에 다시 해 보고, 계속 안 되면 관리자에게 알려 주세요.";
   if (s.includes("password") && s.includes("least")) return "비밀번호는 8자 이상이어야 해요.";
   if (s.includes("weak"))                           return "더 어려운 비밀번호를 써 주세요.";
   if (s.includes("database error") || s.includes("p0001"))

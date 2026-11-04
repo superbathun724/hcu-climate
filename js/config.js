@@ -7,8 +7,8 @@
      DB 전체가 열립니다. 그 키는 Cloudflare Pages 환경 변수에만 둡니다.
 
    이 파일은 ES 모듈입니다. index.html 에서 supabase-js 를 먼저 읽어야 합니다:
-     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-     <script type="module" src="js/main.js"></script>
+     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+     <script type="module" src="js/auth.js"></script>
    ========================================================== */
 
 export const SUPABASE_URL = "https://ktsxgtnontktkrxdkfbw.supabase.co";
@@ -33,6 +33,14 @@ if (SUPABASE_KEY.startsWith("sb_secret_")) {
     `<pre style="padding:24px;font:15px/1.7 monospace">js/config.js 에 secret 키가 들어 있습니다.
 지금 바로 Supabase 대시보드에서 그 키를 폐기하고, publishable 키로 바꾸세요.</pre>`;
   throw new Error("secret key in browser");
+}
+
+/* supabase-js 를 못 받았으면(망 문제, CDN 주소 오타) 화면이 "불러오는 중…"에서 그냥 멈춘다.
+   그러지 않게 무엇이 문제인지 가입 화면에 적는다. */
+if (!window.supabase?.createClient) {
+  const m = document.getElementById("gateMsg");
+  if (m) { m.textContent = "로그인 기능을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요."; m.className = "msg bad"; m.hidden = false; }
+  throw new Error("supabase-js not loaded");
 }
 
 export const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
