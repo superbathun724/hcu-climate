@@ -10,7 +10,6 @@
 --   그 횟수도 서버가 속도로 한 번 더 자른다.
 --
 -- 아직 정하지 않은 것 (정해지면 이 파일에서 숫자만 바꾼다)
---   - 순위 기간: 지금은 누적. rank_classes / rank_clubs
 --   - 재난 2배: 지금은 항상 1배. send_coins 의 v_mult
 --   - 대비율 매일 감소: 아직 없음
 -- ==========================================================
@@ -208,34 +207,58 @@ end;
 $$;
 
 
--- ---------- 순위: 1인당 평균 보낸 코인 (지금은 누적) ----------
+-- ---------- 순위 기간 ----------
+-- 순위는 기간마다 새로 시작한다. 단위를 바꾸려면 아래 'week' 한 단어만 바꾼다:
+--   'day'   매일 0시(한국)          'week'  매주 월요일 0시(한국)          'month'  매달 1일 0시(한국)
+-- 대비율(지역)과 지갑은 기간과 상관없이 쌓인다. 기간이 끊는 것은 순위 숫자뿐이다.
+create or replace function public.rank_unit() returns text language sql immutable as $$ select 'week' $$;
+
+create or replace function public.rank_window()
+returns table (starts timestamptz, ends timestamptz, unit text)
+language sql stable as $$
+  with t as (select date_trunc(public.rank_unit(), now() at time zone 'Asia/Seoul') as local_start)
+  select local_start at time zone 'Asia/Seoul',
+         (local_start + ('1 ' || public.rank_unit())::interval) at time zone 'Asia/Seoul',
+         public.rank_unit()
+    from t
+$$;
+
+-- 화면용: 이번 기간 시작·끝 (남은 시간 표시)
+create or replace function public.rank_round()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('starts', starts, 'ends', ends, 'unit', unit) from public.rank_window()
+$$;
+
+-- ---------- 순위: 이번 기간에 보낸 코인의 1인당 평균 ----------
 -- 분모는 가입한 학생 수. 인원이 적은 팀도 1등을 할 수 있다.
 -- 개인 이름·이메일은 돌려주지 않는다. 팀 단위 숫자만.
 create or replace function public.rank_classes()
 returns table (class_id smallint, region_name text, members integer, sent bigint, sent_today bigint, per_capita numeric)
 language sql stable security definer set search_path = public as $$
-  select c.id,
-         r.name,
-         (select count(*) from public.profiles p where p.class_id = c.id)::integer,
-         coalesce((select sum(amount) from public.sends s where s.class_id = c.id), 0)::bigint,
-         coalesce((select sum(amount) from public.sends s where s.class_id = c.id
-                    and (s.sent_at at time zone 'Asia/Seoul')::date = public.kst_today()), 0)::bigint,
-         round(coalesce((select sum(amount) from public.sends s where s.class_id = c.id), 0)::numeric
-               / nullif((select count(*) from public.profiles p where p.class_id = c.id), 0), 1)
-  from public.classes c join public.regions r on r.id = c.region_id
+  with w as (select starts, ends from public.rank_window()),
+  t as (
+    select c.id, r.name,
+           (select count(*) from public.profiles p where p.class_id = c.id)::integer as m,
+           coalesce((select sum(amount) from public.sends s, w
+                      where s.class_id = c.id and s.sent_at >= w.starts and s.sent_at < w.ends), 0)::bigint as sent,
+           coalesce((select sum(amount) from public.sends s where s.class_id = c.id
+                      and (s.sent_at at time zone 'Asia/Seoul')::date = public.kst_today()), 0)::bigint as today
+      from public.classes c join public.regions r on r.id = c.region_id)
+  select id, name, m, sent, today, round(sent::numeric / nullif(m, 0), 1) from t
   order by 6 desc nulls last, 1;
 $$;
 
 create or replace function public.rank_clubs()
 returns table (club_id smallint, club_name text, members integer, sent bigint, per_capita numeric)
 language sql stable security definer set search_path = public as $$
-  select k.id,
-         k.name,
-         (select count(*) from public.profiles p where p.club_id = k.id)::integer,
-         coalesce((select sum(amount) from public.sends s where s.club_id = k.id), 0)::bigint,
-         round(coalesce((select sum(amount) from public.sends s where s.club_id = k.id), 0)::numeric
-               / nullif((select count(*) from public.profiles p where p.club_id = k.id), 0), 1)
-  from public.clubs k
+  with w as (select starts, ends from public.rank_window()),
+  t as (
+    select k.id, k.name,
+           (select count(*) from public.profiles p where p.club_id = k.id)::integer as m,
+           coalesce((select sum(amount) from public.sends s, w
+                      where s.club_id = k.id and s.sent_at >= w.starts and s.sent_at < w.ends), 0)::bigint as sent
+      from public.clubs k)
+  select id, name, m, sent, round(sent::numeric / nullif(m, 0), 1) from t
   order by 5 desc nulls last, 2;
 $$;
 
@@ -247,6 +270,8 @@ revoke execute on function public.submit_taps(integer)         from public, anon
 revoke execute on function public.send_coins(smallint, integer) from public, anon;
 revoke execute on function public.rank_classes()               from public, anon;
 revoke execute on function public.rank_clubs()                 from public, anon;
+revoke execute on function public.rank_round()                 from public, anon;
+grant  execute on function public.rank_round()                 to authenticated;
 grant  execute on function public.my_state()                   to authenticated;
 grant  execute on function public.submit_taps(integer)         to authenticated;
 grant  execute on function public.send_coins(smallint, integer) to authenticated;

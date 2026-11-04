@@ -9,6 +9,11 @@
 --   list_suggestions 는 글쓴이 대신 "내 글인지(mine)"만 알려 준다.
 --
 -- 채팅 아님: 댓글·답글이 없다. 글 하나에 붙는 것은 공감 수와 학생회 답변 하나뿐이다.
+--
+-- 승인 후 공개
+--   새 글은 "검토 중"으로 들어간다. 글쓴이 본인과 관리자에게만 보이고,
+--   관리자가 승인(approved_at)해야 모두에게 보이고 공감을 받을 수 있다.
+--   거절은 숨기기로 한다(본인에게는 "숨김 처리됨"으로 보인다).
 -- ==========================================================
 
 create table if not exists public.suggestions (
@@ -21,6 +26,16 @@ create table if not exists public.suggestions (
   answered_at timestamptz
 );
 create index if not exists suggestions_user_day_idx on public.suggestions (user_id, created_at);
+
+-- 승인 열. 처음 붙일 때만, 이미 올라와 있던 글은 승인된 것으로 둔다(그동안 공개돼 있었으므로).
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'suggestions' and column_name = 'approved_at') then
+    alter table public.suggestions add column approved_at timestamptz;
+    update public.suggestions set approved_at = created_at;
+  end if;
+end $$;
 
 create table if not exists public.suggestion_votes (
   suggestion_id bigint not null references public.suggestions(id) on delete cascade,
@@ -35,11 +50,13 @@ revoke all on public.suggestions, public.suggestion_votes from anon, authenticat
 
 
 -- ---------- 목록 ----------
--- p_sort: 'top'(공감순) | 'new'(최신순) | 'answered'(답변 완료)
--- 숨긴 글은 관리자에게만 보인다(hidden = true 로 표시).
-create or replace function public.list_suggestions(p_sort text default 'top')
+-- p_sort: 'top'(공감순) | 'new'(최신순) | 'answered'(답변 완료) | 'pending'(승인 대기, 관리자용)
+-- 학생에게 보이는 것: 승인됐고 숨기지 않은 글 + 내 글(검토 중·숨김이어도)
+-- 관리자에게는 전부 보인다.
+drop function if exists public.list_suggestions(text);          -- 돌려주는 열이 늘어서 다시 만든다
+create function public.list_suggestions(p_sort text default 'top')
 returns table (id bigint, body text, created_at timestamptz, votes integer, voted boolean,
-               mine boolean, answer text, answered_at timestamptz, hidden boolean)
+               mine boolean, answer text, answered_at timestamptz, hidden boolean, approved boolean)
 language plpgsql stable security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_admin boolean := public.is_admin();
 begin
@@ -49,13 +66,15 @@ begin
          (select count(*) from public.suggestion_votes v where v.suggestion_id = s.id)::integer,
          exists (select 1 from public.suggestion_votes v where v.suggestion_id = s.id and v.user_id = v_uid),
          s.user_id = v_uid,
-         s.answer, s.answered_at, s.hidden
+         s.answer, s.answered_at, s.hidden, s.approved_at is not null
     from public.suggestions s
-   where (not s.hidden or v_admin)
+   where (v_admin or s.user_id = v_uid or (s.approved_at is not null and not s.hidden))
      and (p_sort <> 'answered' or s.answer is not null)
+     and (p_sort <> 'pending'  or (s.approved_at is null and not s.hidden))
    order by
      case when p_sort = 'top' then (select count(*) from public.suggestion_votes v where v.suggestion_id = s.id) end desc nulls last,
      case when p_sort = 'answered' then s.answered_at end desc nulls last,
+     case when p_sort = 'pending' then s.created_at end asc nulls last,     -- 오래 기다린 글부터
      s.created_at desc
    limit 300;
 end;
@@ -87,7 +106,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_uid uuid := auth.uid(); v_owner uuid; v_on boolean;
 begin
   if v_uid is null then raise exception '로그인이 필요해요.' using errcode = '42501'; end if;
-  select user_id into v_owner from public.suggestions where id = p_id and not hidden;
+  select user_id into v_owner from public.suggestions where id = p_id and not hidden and approved_at is not null;
   if v_owner is null then raise exception '글을 찾을 수 없어요.' using errcode = 'P0001'; end if;
   if v_owner = v_uid then raise exception '내 글에는 공감할 수 없어요.' using errcode = 'P0001'; end if;
 
@@ -116,6 +135,27 @@ begin
 end;
 $$;
 
+-- ---------- 관리자: 승인 / 승인 취소 ----------
+create or replace function public.admin_approve_suggestion(p_id bigint, p_approve boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform public.require_admin();
+  update public.suggestions
+     set approved_at = case when coalesce(p_approve, true) then coalesce(approved_at, now()) end,
+         hidden = case when coalesce(p_approve, true) then false else hidden end
+   where id = p_id;
+  if not found then raise exception '글을 찾을 수 없어요.' using errcode = 'P0001'; end if;
+end;
+$$;
+
+-- 승인 대기 수 (관리자 탭에 점을 찍는 데 쓴다)
+create or replace function public.pending_suggestions()
+returns integer language sql stable security definer set search_path = public as $$
+  select case when public.is_admin()
+              then (select count(*) from public.suggestions where approved_at is null and not hidden)::integer
+              else 0 end
+$$;
+
 -- ---------- 관리자: 숨기기 / 다시 보이기 ----------
 create or replace function public.admin_hide_suggestion(p_id bigint, p_hidden boolean)
 returns void language plpgsql security definer set search_path = public as $$
@@ -132,6 +172,10 @@ revoke execute on function public.post_suggestion(text)                from publ
 revoke execute on function public.toggle_vote(bigint)                  from public, anon;
 revoke execute on function public.admin_answer_suggestion(bigint, text) from public, anon;
 revoke execute on function public.admin_hide_suggestion(bigint, boolean) from public, anon;
+revoke execute on function public.admin_approve_suggestion(bigint, boolean) from public, anon;
+revoke execute on function public.pending_suggestions()              from public, anon;
+grant  execute on function public.admin_approve_suggestion(bigint, boolean) to authenticated;
+grant  execute on function public.pending_suggestions()              to authenticated;
 grant  execute on function public.list_suggestions(text)               to authenticated;
 grant  execute on function public.post_suggestion(text)                to authenticated;
 grant  execute on function public.toggle_vote(bigint)                  to authenticated;

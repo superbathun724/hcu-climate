@@ -12,7 +12,7 @@
 
 | 무엇 | 어디서 | 바꾼 점 |
 |---|---|---|
-| 화면 구조(상단바·탭·목록 행), 색·글꼴 토큰, 울산 장면 | un-summit `index.html`·`styles.css` | 도시 선택 → 반·동아리, 영어 UI → 한국어 |
+| 화면 구조(상단바·탭·목록 행), 색·글꼴 토큰, 도시별 풍경·방벽 그림 | un-summit `index.html`·`styles.css`·`app.js`(SCENES) | 도시 선택 → 반·동아리, 한국 도시 → 바깥 지역 7곳, 영어 UI → 한국어 |
 | 대비율 50% 선, 20코인 = 1% | un-summit `app.js` (방벽, DEF_PER_PCT) | 대비율은 바깥 지역에만, 서버가 계산 |
 | 1인당 평균 순위 | un-summit 하루 보드 | 도시 → 반·동아리 두 개 |
 | 로그인, 계정별 데이터, publishable 키 규칙 | voca-web `js/auth.js`·`js/config.js` | 새 Supabase 프로젝트, 학교 도메인 검사 추가 |
@@ -29,9 +29,9 @@ Supabase → SQL Editor 에서 `sql/` 파일을 **번호 순서대로** 붙여 �
 |---|---|
 | `01_schema.sql` | 반·동아리·지역, 프로필, 가입 검사(학교 도메인), 관리자 |
 | `02_words.sql` | 단어장·단어·진도, 관리자 단어장 함수(올리기·덮어쓰기·이름·숨기기·삭제) |
-| `03_game.sql` | 지갑, 탭(구간마다 효율 절반, 속도 제한), 코인 보내기, 반·동아리 순위 |
+| `03_game.sql` | 지갑, 탭(구간마다 효율 절반, 속도 제한), 코인 보내기, 반·동아리 순위(주간) |
 | `04_study.sql` | 단어 공부 기록과 코인(같은 단어는 하루 한 번), 서버 채점용 권한 |
-| `05_voice.sql` | 건의함: 글, 공감, 학생회 답변, 숨기기 |
+| `05_voice.sql` | 건의함: 글(관리자 승인 후 공개), 공감, 학생회 답변, 숨기기 |
 
 관리자 추가는 `01_schema.sql` 맨 아래 SQL 을 이메일만 바꿔 실행한다. 여러 명이면 `where email in ('a@hcu.hs.kr', 'b@hcu.hs.kr')`.
 
@@ -65,22 +65,28 @@ Workers & Pages → hcu-climate → Settings → Variables and Secrets (Producti
 | `js/ui.js` | 공용 도구: 글자 이스케이프, 안내, 코인 칩, 알림 줄 |
 | `js/nav.js` | 탭 전환 |
 | `js/auth.js` | 가입·로그인·로그아웃·비밀번호 찾기 |
-| `js/game.js` | 게임 탭: 탭 → 서버(2초마다 모아서) |
+| `js/game.js` | 게임 탭: 탭 → 서버(2초마다 모아서), 우리 반 지역 풍경과 대비율 |
+| `js/scenes.js` | 지역 7곳 풍경 SVG, 방파제·제방 그림 (un-summit SCENES 방식) |
 | `js/words.js` | 단어 탭: 단어장 목록·보기 |
 | `js/study.js` | 고른 단어장으로 공부 (20개씩) |
 | `js/quiz-core.js` | 단계별 문제 유형과 채점 — 브라우저와 서버가 같이 씀 |
 | `js/grade.js` | 한국어 뜻 채점 규칙 (voca-web 그대로) |
 | `js/csv.js` | 단어 CSV 읽기 (voca-web 형식 그대로) |
 | `js/send.js` | 지원 탭: 바깥 지역에 코인 보내기 |
-| `js/rank.js` | 순위 탭: 반·동아리 1인당 평균 |
+| `js/rank.js` | 순위 탭: 이번 주 반·동아리 1인당 평균, 남은 시간 |
 | `js/voice.js` | 건의함 |
 | `js/admin.js` | 관리: 단어장, 건의함 내보내기 |
 | `functions/api/answer.js` | 단어 채점 서버 함수 (Cloudflare Pages Functions) |
 | `sql/01~05` | DB |
 
+## 정해 둔 것 (바꾸려면 한 곳만)
+
+- 순위 기간: 매주 월요일 0시(한국) 새로 시작. `03_game.sql` 의 `rank_unit()` 에서 `'week'` → `'day'`/`'month'`
+- 건의: 새 글은 관리자 승인 후 공개. 거절은 숨기기
+- 게임 배경: 우리 반이 돕는 지역. 방파제·제방 높이 = 그 지역 대비율
+
 ## 아직 정하지 않은 것
 
-- 순위 기간: 지금은 누적 (`03_game.sql` 의 `rank_classes`·`rank_clubs`)
 - 재난 이벤트(빨간 고정·2배): 아직 없음 (`send_coins` 의 `v_mult`)
 - 대비율 매일 감소: 아직 없음
 - 20코인 = 대비율 1% (`coins_per_pct`, un-summit 값을 임시로 씀)

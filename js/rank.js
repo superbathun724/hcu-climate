@@ -1,5 +1,6 @@
 /* ==========================================================
-   rank.js — 순위 탭: 반 순위, 동아리 순위 (1인당 평균 보낸 코인)
+   rank.js — 순위 탭: 반 순위, 동아리 순위 (이번 기간에 보낸 코인의 1인당 평균)
+   기간(주·일·월)은 서버(sql/03_game.sql 의 rank_unit)가 정하고, 화면은 남은 시간만 센다.
    맨 위 카드는 우리 반이 돕는 지역의 대비율(팀 페이지 역할).
    서버는 팀 단위 숫자만 준다. 학생 개인 이름·이메일은 오지 않는다.
    ========================================================== */
@@ -8,15 +9,41 @@ import { $, esc, onProfile, num1 } from "./ui.js";
 
 let kind = "class";
 let me = null;
+let roundEnd = 0;          // 이번 기간이 끝나는 시각(ms)
+const UNIT = { day: "오늘", week: "이번 주", month: "이번 달" };
+
+function left(ms) {
+  if (ms <= 0) return "곧 새 기간";
+  const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+        m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}일 ${h}시간 ${m}분 남음`;
+  if (h) return `${h}시간 ${m}분 남음`;
+  return `${m}분 ${String(sec).padStart(2, "0")}초 남음`;
+}
+function drawClock() {
+  if (!roundEnd) return;
+  const ms = roundEnd - Date.now();
+  $("roundLeft").textContent = left(ms);
+  if (ms <= 0 && $("rank").classList.contains("on")) { roundEnd = 0; setTimeout(load, 3000); }   // 새 기간으로 다시 읽기
+}
+setInterval(drawClock, 1000);
 
 async function load() {
   if (!me) return;
-  const [cls, clubs, reg] = await Promise.all([
+  const [cls, clubs, reg, round] = await Promise.all([
     db.rpc("rank_classes"),
     kind === "club" ? db.rpc("rank_clubs") : Promise.resolve({ data: null }),
     db.from("regions").select("id, name, shield"),
+    db.rpc("rank_round"),
   ]);
   if (cls.error || reg.error) { $("rankList").innerHTML = `<p class="note">순위를 불러오지 못했어요.</p>`; return; }
+  if (round.data) {
+    roundEnd = new Date(round.data.ends).getTime();
+    $("roundName").textContent = `${UNIT[round.data.unit] ?? "이번 기간"} 순위`;
+    const end = new Date(round.data.ends);
+    $("round").title = `${end.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short", hour: "numeric" })}에 새로 시작`;
+    drawClock();
+  }
 
   // 우리 반 카드
   const mine = cls.data.find(r => r.class_id === me.classId);
@@ -37,7 +64,7 @@ async function load() {
   $("rankList").innerHTML = rows.map((r, i) => {
     if (r.v !== prev) { rank = i + 1; prev = r.v; }
     return `<div class="rk${r.me ? " me" : ""}"><span class="n">${r.v == null ? "–" : rank}</span>
-      <div class="m"><div class="t">${esc(r.t)}</div><div class="d">가입 ${r.m}명 · 모두 ${Number(r.sent).toLocaleString()}코인</div></div>
+      <div class="m"><div class="t">${esc(r.t)}</div><div class="d">가입 ${r.m}명 · 이번 기간 ${Number(r.sent).toLocaleString()}코인</div></div>
       <span class="v">${r.v == null ? "–" : num1(r.v)}</span></div>`;
   }).join("") || `<p class="note">아직 기록이 없어요.</p>`;
 }
