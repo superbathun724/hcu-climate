@@ -57,4 +57,5 @@ $("sets").addEventListener("click", e => {
 });
 
 onProfile(() => loadSets());
+window.addEventListener("hcu:newday", () => { if (window.hcuProfile) loadSets(); });   // "오늘 받음" 표시를 새로
 window.addEventListener("hcu:sets-changed", () => loadSets());   // 관리자가 바꾸면 다시 읽는다

@@ -82,3 +82,4 @@ document.querySelectorAll("#rankSeg button").forEach(b => b.addEventListener("cl
 window.addEventListener("hcu:tab", e => { if (e.detail === "rank") load(); });
 window.addEventListener("hcu:sent", () => { if ($("rank").classList.contains("on")) load(); });
 onProfile(p => { me = p; load(); });
+window.addEventListener("hcu:newday", () => load());          // "오늘 우리 반 지원"을 0부터

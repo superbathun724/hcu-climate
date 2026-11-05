@@ -104,13 +104,18 @@ async function loadRegion(classId) {
   changed ? drawScene() : drawShield();
 }
 
-async function load() {
+async function load(retry = 1) {
+  if (pending || inflight) await flush();            // 아직 안 보낸 누름을 먼저 보낸다(버리지 않게)
   ready = false;
   const { data, error } = await db.rpc("my_state");
-  if (error) { tick("게임 기록을 불러오지 못했어요. 새로고침해 주세요.", "bad"); return; }
-  taps = data.taps_today;
-  pending = 0;
-  setBalance(data.balance);
+  if (error) {
+    // 폰이 오래 잠들었다 깨면 로그인 토큰이 갱신되기 전에 부를 수 있다. 잠깐 뒤 한 번 더.
+    if (retry > 0) return setTimeout(() => load(retry - 1), 2000);
+    tick("게임 기록을 불러오지 못했어요. 새로고침해 주세요.", "bad"); return;
+  }
+  taps = data.taps_today + pending;
+  if (pending) setBalance(Number(data.balance) + coinsFor(data.taps_today, pending));
+  else setBalance(data.balance);
   if (data.locked) return window.dispatchEvent(new Event("hcu:locked"));
   ready = true;
   draw();
@@ -214,6 +219,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushOnLeave();
   else if (ready) load();                         // 돌아오면(자정을 넘겼을 수도) 서버 값으로 다시
 });
+/* 자정이 지나면 누른 횟수·효율을 서버 값(0부터)으로 다시. 켜 둔 채 밤을 넘긴 화면도 */
+window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 누를 때 받는 코인이 다시 1코인이에요."); } });
 window.addEventListener("pagehide", flushOnLeave);
 
 db.auth.onAuthStateChange((_e, session) => { token = session?.access_token ?? ""; });

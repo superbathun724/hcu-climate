@@ -70,6 +70,18 @@ export function tick(text, kind = "") {
 /** 한국 날짜 "YYYY-MM-DD" (서버 kst_today() 와 같은 날짜) */
 export const kstToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 
+/* 자정(한국 시각)을 넘기면 "hcu:newday" 를 한 번 알린다.
+   화면을 켜 둔 채 밤을 넘기거나, 폰에서 잠들었던 탭이 아침에 깨어나도 하루 기록(누른 횟수·효율·
+   오늘 받은 단어 코인)을 새로 읽게 하려는 것. 브라우저가 백그라운드 타이머를 멈추므로
+   화면으로 돌아올 때도 한 번 더 본다. */
+let today = kstToday();
+function checkDay() {
+  const d = kstToday();
+  if (d !== today) { today = d; window.dispatchEvent(new CustomEvent("hcu:newday", { detail: d })); }
+}
+setInterval(checkDay, 15000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkDay(); });
+
 /** 소수 한 자리까지, 끝의 .0 은 뗀다 */
 export const num1 = v => (Math.round(Number(v) * 10) / 10).toLocaleString();
 
