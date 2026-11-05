@@ -58,7 +58,7 @@ create function public.list_suggestions(p_sort text default 'top')
 returns table (id bigint, body text, created_at timestamptz, votes integer, voted boolean,
                mine boolean, answer text, answered_at timestamptz, hidden boolean, approved boolean)
 language plpgsql stable security definer set search_path = public as $$
-declare v_uid uuid := auth.uid(); v_admin boolean := public.is_admin();
+declare v_uid uuid := auth.uid(); v_admin boolean := public.admin_ok();
 begin
   if v_uid is null then raise exception '로그인이 필요해요.' using errcode = '42501'; end if;
   return query
@@ -153,7 +153,7 @@ $$;
 -- 승인 대기 수 (관리자 탭에 점을 찍는 데 쓴다)
 create or replace function public.pending_suggestions()
 returns integer language sql stable security definer set search_path = public as $$
-  select case when public.is_admin()
+  select case when public.admin_ok()
               then (select count(*) from public.suggestions where approved_at is null and not hidden)::integer
               else 0 end
 $$;

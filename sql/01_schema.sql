@@ -113,6 +113,18 @@ as $$
   select exists (select 1 from public.admins where user_id = auth.uid())
 $$;
 
+-- 관리자이면서 이번 로그인에서 2단계 인증(휴대폰 인증 앱의 6자리)까지 마쳤는가.
+-- 관리자 기능은 전부 이것을 본다. 비밀번호만 털려서는 관리 기능을 쓸 수 없다.
+-- (aal2 = Supabase 가 "2단계까지 확인한 로그인"에 붙이는 표시. 토큰 안에 있어 위조할 수 없다)
+create or replace function public.admin_ok()
+returns boolean
+language sql stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin() and coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
+$$;
+
 
 -- ==========================================================
 -- 가입 검사
@@ -222,11 +234,16 @@ revoke execute on function public.on_signup()        from public, anon, authenti
 revoke execute on function public.on_email_change()  from public, anon, authenticated;
 revoke execute on function public.is_admin()         from public, anon;
 grant  execute on function public.is_admin()         to authenticated;
+revoke execute on function public.admin_ok()         from public, anon;
+grant  execute on function public.admin_ok()         to authenticated;
 
 
 -- ==========================================================
 -- 관리자 등록 (한 번만, 이메일만 바꿔서 따로 실행)
 -- 그 계정으로 먼저 가입·인증을 마친 뒤에 실행해야 한다.
+-- 등록된 관리자는 처음 관리 화면을 열 때 휴대폰 인증 앱(Google Authenticator 등)을 연결한다.
+-- 휴대폰을 잃어버렸으면 아래를 실행해 연결을 지우고, 다시 관리 화면에서 새로 연결한다.
+--   delete from auth.mfa_factors where user_id = (select id from auth.users where email = '아이디@hcu.hs.kr');
 -- ==========================================================
 -- insert into public.admins (user_id)
 -- select id from auth.users where email = '아이디@hcu.hs.kr'

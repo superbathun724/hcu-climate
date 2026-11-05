@@ -107,6 +107,12 @@ create or replace function public.tap_band() returns integer language sql immuta
 -- 사람이 낼 수 있는 속도. 1초에 15번, 한 번에 모아 보낼 수 있는 시간은 최대 10초.
 create or replace function public.tap_speed() returns integer language sql immutable as $$ select 15 $$;
 
+-- 하루에 사람이 낼 수 없는 누른 횟수. 넘으면 봇으로 보고 잠근다(관리자가 풀 수 있다).
+-- 8만 번 = 초당 5번으로 4시간 반을 쉬지 않고 눌러야 하는 양. 사람은 닿지 않고,
+-- API 를 직접 부르는 봇은 하루 종일 돌리면 걸린다. 효율이 구간마다 절반이라
+-- 봇이 이 아래에서 멈춰도 열심히 하는 학생과 코인 차이가 크지 않다.
+create or replace function public.tap_day_max() returns integer language sql immutable as $$ select 80000 $$;
+
 -- 코인 몇 개가 대비율 1% 인가 (un-summit DEF_PER_PCT 20 을 그대로 가져옴)
 create or replace function public.coins_per_pct() returns integer language sql immutable as $$ select 20 $$;
 
@@ -211,7 +217,7 @@ $$;
 -- 관리자 링크에 점을 찍는 데 쓴다
 create or replace function public.locked_count()
 returns integer language sql stable security definer set search_path = public as $$
-  select case when public.is_admin()
+  select case when public.admin_ok()
               then (select count(*) from public.players where locked_at is not null)::integer else 0 end
 $$;
 
@@ -331,6 +337,12 @@ begin
   end if;
 
   v_take  := greatest(0, least(coalesce(p_n, 0), v_allowed, 500));
+
+  if p.taps_today + v_take > public.tap_day_max() then
+    perform public.lock_player(v_uid, 'too-many', jsonb_build_object('taps_today', p.taps_today + v_take, 'max', public.tap_day_max()));
+    return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
+  end if;
+
   v_coins := public.tap_coins(p.taps_today, v_take);
 
   update public.players set

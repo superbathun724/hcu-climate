@@ -46,7 +46,7 @@ async function rest(env, path) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), Accept: "application/json" },
   });
-  if (!res.ok) throw new Error(`DB 읽기 실패 (${res.status})`);
+  if (!res.ok) throw new Error(`DB read ${res.status}`);
   return res.json();
 }
 
@@ -84,7 +84,7 @@ export async function onRequestPost({ request, env }) {
   try {
     // 숨긴 단어장의 단어는 공부할 수 없다
     const [w] = await rest(env,
-      `words?id=eq.${wordId}&select=id,word,senses,synonyms,antonyms,phrases,sentences,word_sets!inner(hidden)&word_sets.hidden=eq.false`);
+      `words?id=eq.${wordId}&select=id,word,senses,synonyms,antonyms,phrases,sentences,word_sets!inner(hidden,deleted_at)&word_sets.hidden=eq.false&word_sets.deleted_at=is.null`);
     if (!w) return json({ error: "단어를 찾을 수 없어요." }, 404);
 
     const [pr] = await rest(env, `progress?user_id=eq.${userId}&word_id=eq.${wordId}&select=srs_level`);
@@ -105,11 +105,16 @@ export async function onRequestPost({ request, env }) {
     });
     const text = await res.text();
     if (!res.ok) {
-      let msg = text; try { msg = JSON.parse(text).message || text; } catch { /* 그대로 */ }
-      return json({ error: msg }, 400);
+      // 우리 SQL 이 일부러 낸 안내(P0001, 한국어: "계정이 잠겨 있어요" 등)만 그대로 보여 준다.
+      // 그 밖의 DB 오류는 표·열 이름이 들어 있어 공격자에게 힌트가 되므로 숨기고 서버 기록에만 남긴다.
+      let err = {}; try { err = JSON.parse(text); } catch { /* 그대로 */ }
+      if (err.code === "P0001" && /[가-힣]/.test(err.message || "")) return json({ error: err.message }, 400);
+      console.error("record_answer", res.status, text);
+      return json({ error: "채점을 기록하지 못했어요. 잠시 뒤에 다시 해 주세요." }, 500);
     }
     return json({ ...JSON.parse(text), answer: answerText(w, type) });
   } catch (e) {
-    return json({ error: e.message || "서버 오류" }, 502);
+    console.error("answer", e);
+    return json({ error: "채점 서버에 문제가 생겼어요. 잠시 뒤에 다시 해 주세요." }, 502);
   }
 }

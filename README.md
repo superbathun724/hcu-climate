@@ -35,6 +35,10 @@ Supabase → SQL Editor 에서 `sql/` 파일을 **번호 순서대로** 붙여 �
 
 관리자 추가는 `01_schema.sql` 맨 아래 SQL 을 이메일만 바꿔 실행한다. 여러 명이면 `where email in ('a@hcu.hs.kr', 'b@hcu.hs.kr')`.
 
+관리자는 **2단계 인증**을 해야 관리 기능을 쓸 수 있다. 처음 관리 화면을 열면 휴대폰 인증 앱(Google Authenticator 등)으로 QR 을 찍어 연결하고,
+그 뒤로는 로그인할 때마다 6자리를 넣는다. 휴대폰을 잃어버렸으면 SQL Editor 에서 연결을 지우고 다시 연결한다:
+`delete from auth.mfa_factors where user_id = (select id from auth.users where email = '아이디@hcu.hs.kr');`
+
 ## Cloudflare 환경 변수 (단어 채점에 필요)
 
 Workers & Pages → hcu-climate → Settings → Variables and Secrets (Production)
@@ -60,6 +64,8 @@ Workers & Pages → hcu-climate → Settings → Variables and Secrets (Producti
 | 파일 | 내용 |
 |---|---|
 | `index.html` `styles.css` | 화면 (폰·태블릿·PC 적응형) |
+| `_headers` | 보안 헤더(CSP: 이 사이트의 스크립트만 실행, 데이터는 우리 Supabase 로만, iframe 금지). Supabase 주소가 바뀌면 여기도 |
+| `vendor/supabase-js-2.45.4/` | supabase-js (npm 원본 그대로). CDN 대신 저장소에 둔다 |
 | `privacy.html` | 개인정보처리방침 (초안) |
 | `js/config.js` | Supabase 주소와 publishable 키 |
 | `js/ui.js` | 공용 도구: 글자 이스케이프, 안내, 코인 칩, 알림 줄 |
@@ -76,7 +82,7 @@ Workers & Pages → hcu-climate → Settings → Variables and Secrets (Producti
 | `js/event.js` | 재난 이벤트를 15초마다 묻고 다른 화면에 알림 |
 | `js/rank.js` | 순위 탭: 이번 주 반·동아리 1인당 평균, 남은 시간 |
 | `js/voice.js` | 건의함 |
-| `js/admin.js` | 관리: 단어장, 건의함 내보내기 |
+| `js/admin.js` | 관리: 2단계 인증, 단어장(올리기·내려받기·삭제 대기·복구), 잠긴 계정, 건의함 내보내기 |
 | `functions/api/answer.js` | 단어 채점 서버 함수 (Cloudflare Pages Functions) |
 | `sql/01~05` | DB |
 
@@ -95,6 +101,11 @@ Workers & Pages → hcu-climate → Settings → Variables and Secrets (Producti
 - 계정 잠금: 같은 자리를 초당 14번 넘게 / 간격이 기계처럼 일정(평균 250ms 미만, 흔들림 6% 미만) /
   스크립트가 만든 누름 / 서버가 본 "사람 속도보다 훨씬 많이" 1분에 3번 → 잠금. 관리자 화면 "잠긴 계정"에서 푼다.
   화면 쪽 검사는 우회할 수 있다. 막는 것이 아니라 걸러 내는 장치다
+- 하루 누른 횟수가 8만 번을 넘으면 잠금(API 를 직접 부르는 봇 대비). 사람은 초당 5번으로 4시간 반을 쉬지 않아야 닿는다.
+  `03_game.sql` 의 `tap_day_max()`
+- 단어장 삭제는 7일 동안 "삭제 대기"(학생에게 안 보임, 관리자가 복구 가능). 그 뒤 단어·진도까지 지운다
+- 관리 기능은 2단계 인증한 로그인에서만(`01_schema.sql` 의 `admin_ok()`)
+- 단어 채점 서버는 우리가 쓴 한국어 안내만 그대로 보여 주고, 그 밖의 DB 오류 내용은 숨긴다
 
 ## 아직 정하지 않은 것
 

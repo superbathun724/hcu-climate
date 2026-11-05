@@ -115,3 +115,32 @@ export function countDuplicates(words) {
   for (const w of words) { if (seen.has(w.word)) dup++; else seen.add(w.word); }
   return dup;
 }
+
+/* ---------- 내보내기 (관리자 백업) ----------
+   rowsToWords 가 그대로 다시 읽을 수 있는 모양으로 쓴다. 뜻·메모는 늘 "|" 를 넣어
+   (품사가 비어도 "|뜻") 읽을 때 앞 칸에 이어 붙는 일이 없게 한다. */
+const deFormula = v => /^[=+\-@]/.test(v) ? "'" + v : v;                 // 엑셀 수식 방지
+const csvCell = v => { const s = deFormula(String(v ?? "")); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const clean = v => String(v ?? "").replace(/[;|]/g, ",").trim();         // 칸 안 구분자와 겹치지 않게
+
+export function wordsToCSV(words) {
+  const nP = Math.max(2, ...words.map(w => (w.phrases || []).length));
+  const nS = Math.max(1, ...words.map(w => (w.sentences || []).length));
+  const head = [...BASE];
+  for (let i = 1; i <= nP; i++) head.push(`phrase${i}`, `phrase${i}_ko`);
+  for (let i = 1; i <= nS; i++) head.push(`sentence${i}`, `sentence${i}_ko`);
+  const lines = [head.join(",")];
+  for (const w of words) {
+    const row = [
+      w.word,
+      (w.senses || []).map(s => `${clean(s.pos)}|${clean(s.meaning)}`).join("; "),
+      (w.notes || []).map(n => `${clean(n.word)}|${clean(n.pos)}|${clean(n.meaning)}`).join("; "),
+      (w.synonyms || []).map(n => `${clean(n.word)}||${clean(n.meaning)}`).join("; "),
+      (w.antonyms || []).map(n => `${clean(n.word)}||${clean(n.meaning)}`).join("; "),
+    ];
+    for (let i = 0; i < nP; i++) { const p = (w.phrases || [])[i]; row.push(p?.text ?? "", p?.meaning ?? ""); }
+    for (let i = 0; i < nS; i++) { const p = (w.sentences || [])[i]; row.push(p?.text ?? "", p?.meaning ?? ""); }
+    lines.push(row.map(csvCell).join(","));
+  }
+  return lines.join("\n");
+}

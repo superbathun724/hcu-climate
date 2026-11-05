@@ -217,9 +217,11 @@ async function onSignedIn() {
 
   // 관리자 링크는 서버가 관리자라고 할 때만 보인다. 숨겨도 관리 기능 자체는 서버가 막는다.
   const { data: admin } = await db.rpc("is_admin");
+  // 관리 기능은 2단계 인증(aal2)까지 마친 로그인에서만 열린다(sql admin_ok). 학생은 부를 필요가 없다.
+  const adminOk = admin === true && (await db.rpc("admin_ok")).data === true;
   const profile = { classId: data.class_id, clubId: data.club_id, clubName: data.clubs?.name ?? "",
                     className: data.classes?.name ?? `${data.class_id}반`,
-                    regionId: data.classes?.region_id ?? null, isAdmin: admin === true };
+                    regionId: data.classes?.region_id ?? null, isAdmin: admin === true, adminOk };
   window.hcuProfile = profile;
   $("chipTxt").textContent = `${profile.className} · ${profile.clubName}`;
   $("adminLink").hidden = !profile.isAdmin;

@@ -1,0 +1,15 @@
+# Cloudflare Pages 가 모든 응답에 붙이는 보안 헤더. (https://developers.cloudflare.com/pages/configuration/headers/)
+#
+# Content-Security-Policy: 혹시 XSS 구멍이 생겨도 남의 스크립트가 실행되거나 로그인 토큰이 밖으로 새지 않게.
+#   script-src 'self'   : 이 사이트에 있는 .js 파일만 실행. <script>alert()</script> 같은 글 안 스크립트, onerror= 는 실행 안 됨
+#   connect-src         : 데이터는 이 사이트와 우리 Supabase 로만 보낼 수 있다(토큰을 다른 서버로 못 보냄)
+#   style·font          : Pretendard 글꼴만 jsdelivr 에서
+#   frame-ancestors     : 다른 사이트가 우리 사이트를 iframe 으로 띄우지 못하게(클릭 가로채기 방지)
+# Supabase 주소가 바뀌면 connect-src 의 두 주소만 고친다.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net data:; img-src 'self' data: blob:; connect-src 'self' https://ktsxgtnontktkrxdkfbw.supabase.co wss://ktsxgtnontktkrxdkfbw.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000

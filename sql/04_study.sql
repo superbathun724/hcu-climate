@@ -40,7 +40,7 @@ declare
   v_balance numeric;
 begin
   if not exists (select 1 from public.words w join public.word_sets s on s.id = w.set_id
-                  where w.id = p_word and not s.hidden) then
+                  where w.id = p_word and not s.hidden and s.deleted_at is null) then
     raise exception '단어를 찾을 수 없어요.' using errcode = 'P0001';
   end if;
   if not exists (select 1 from public.profiles where user_id = p_user) then

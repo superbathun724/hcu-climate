@@ -321,3 +321,5 @@ footer{padding:12px var(--gut) 18px;font-size:.75rem;color:var(--sub);text-align
 #lockScreen h2{color:#9b2c1f;font-size:1.2rem;margin-bottom:8px}
 #lockScreen p{margin-bottom:8px;color:#3c4d5a}
 #adminLink a.dot::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alert);margin-left:4px;vertical-align:middle}
+.mfaqr{display:block;width:180px;height:180px;margin:8px 0;background:#fff;border-radius:8px;padding:6px}
+#mfaCode{max-width:9em;letter-spacing:.2em;font-variant-numeric:tabular-nums}

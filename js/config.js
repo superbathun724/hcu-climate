@@ -7,7 +7,7 @@
      DB 전체가 열립니다. 그 키는 Cloudflare Pages 환경 변수에만 둡니다.
 
    이 파일은 ES 모듈입니다. index.html 에서 supabase-js 를 먼저 읽어야 합니다:
-     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+     <script src="vendor/supabase-js-2.45.4/supabase.js"></script>   (npm 에서 받은 원본 그대로, 저장소에 둠)
      <script type="module" src="js/auth.js"></script>
    ========================================================== */
 

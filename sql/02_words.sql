@@ -37,6 +37,10 @@ create table if not exists public.words (
 );
 create index if not exists words_set_idx on public.words (set_id, position);
 
+-- 삭제는 바로 지우지 않고 7일 동안 "삭제 대기"로 둔다(관리자 계정을 뺏겨도 되돌릴 수 있게).
+-- 그동안 학생에게는 안 보이고, 관리자가 복구할 수 있다. 7일이 지나면 단어·진도까지 지운다.
+alter table public.word_sets add column if not exists deleted_at timestamptz;
+
 -- ---------- 학습 진도 (voca-web progress 그대로) ----------
 -- 학생마다 따로. 단어가 지워지면 그 단어의 진도도 같이 지워진다.
 -- 이미 받은 코인은 별도 장부(이후 파일)에 있으므로 지워지지 않는다.
@@ -67,13 +71,13 @@ revoke insert, update, delete on public.word_sets, public.words, public.progress
 drop policy if exists word_sets_read on public.word_sets;
 create policy word_sets_read on public.word_sets
   for select to authenticated
-  using (not hidden or public.is_admin());
+  using ((not hidden and deleted_at is null) or public.is_admin());
 
 drop policy if exists words_read on public.words;
 create policy words_read on public.words
   for select to authenticated
   using (exists (select 1 from public.word_sets s
-                  where s.id = set_id and (not s.hidden or public.is_admin())));
+                  where s.id = set_id and ((not s.hidden and s.deleted_at is null) or public.is_admin())));
 
 drop policy if exists progress_read_own on public.progress;
 create policy progress_read_own on public.progress
@@ -91,6 +95,9 @@ returns void language plpgsql stable security definer set search_path = public a
 begin
   if not public.is_admin() then
     raise exception '관리자만 할 수 있어요.' using errcode = '42501';
+  end if;
+  if not public.admin_ok() then
+    raise exception '관리자 2단계 인증을 먼저 해 주세요(관리 화면 맨 위).' using errcode = 'P0001';
   end if;
 end;
 $$;
@@ -136,12 +143,14 @@ begin
   if v_rows = 0    then raise exception '단어 목록이 비어 있어요.' using errcode = 'P0001'; end if;
   if v_rows > 1000 then raise exception '한 번에 1,000줄까지 올릴 수 있어요.' using errcode = 'P0001'; end if;
 
+  perform public.purge_deleted_sets();
   select id into v_set from public.word_sets where name = v_name for update;
   if v_set is null then
     insert into public.word_sets (name) values (v_name) returning id into v_set;
     v_created := true;
   else
-    update public.word_sets set updated_at = now() where id = v_set;
+    -- 삭제 대기 중인 같은 이름이면 덮어쓰면서 되살린다
+    update public.word_sets set updated_at = now(), deleted_at = null where id = v_set;
   end if;
 
   -- CSV 를 표 모양으로. 같은 단어는 마지막 줄만 남긴다.
@@ -223,15 +232,34 @@ begin
 end;
 $$;
 
--- ---------- 삭제 ----------
--- 단어와 학생 진도가 같이 지워진다. 되돌릴 수 없다. 망설여지면 숨기기를 쓴다.
+-- ---------- 삭제 (7일 대기) / 복구 ----------
+-- 삭제하면 7일 동안 학생에게서 사라지고, 그 뒤 단어와 학생 진도가 같이 지워진다.
+-- 7일이 지난 것은 관리자가 단어장 함수를 쓸 때 정리한다(cron 없이).
+create or replace function public.purge_deleted_sets()
+returns void
+language sql security definer set search_path = public as $$
+  delete from public.word_sets where deleted_at < now() - interval '7 days'
+$$;
+
 create or replace function public.admin_delete_set(p_set bigint)
 returns void
 language plpgsql security definer set search_path = public as $$
 begin
   perform public.require_admin();
-  delete from public.word_sets where id = p_set;
+  perform public.purge_deleted_sets();
+  update public.word_sets set deleted_at = coalesce(deleted_at, now()), updated_at = now() where id = p_set;
   if not found then raise exception '단어장을 찾을 수 없어요.' using errcode = 'P0001'; end if;
+end;
+$$;
+
+create or replace function public.admin_restore_set(p_set bigint)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.require_admin();
+  perform public.purge_deleted_sets();
+  update public.word_sets set deleted_at = null, updated_at = now() where id = p_set and deleted_at is not null;
+  if not found then raise exception '복구할 단어장을 찾을 수 없어요(7일이 지났을 수 있어요).' using errcode = 'P0001'; end if;
 end;
 $$;
 
@@ -244,10 +272,13 @@ revoke execute on function public.admin_upload_set(text, jsonb)     from public,
 revoke execute on function public.admin_rename_set(bigint, text)    from public, anon;
 revoke execute on function public.admin_set_hidden(bigint, boolean) from public, anon;
 revoke execute on function public.admin_delete_set(bigint)          from public, anon;
+revoke execute on function public.admin_restore_set(bigint)         from public, anon;
+revoke execute on function public.purge_deleted_sets()              from public, anon, authenticated;
 grant  execute on function public.admin_upload_set(text, jsonb)     to authenticated;
 grant  execute on function public.admin_rename_set(bigint, text)    to authenticated;
 grant  execute on function public.admin_set_hidden(bigint, boolean) to authenticated;
 grant  execute on function public.admin_delete_set(bigint)          to authenticated;
+grant  execute on function public.admin_restore_set(bigint)         to authenticated;
 
 
 -- ---------- 확인 ----------

@@ -10,6 +10,7 @@ export async function loadSets() {
   const box = $("sets");
   const { data, error } = await db.from("word_sets")
     .select("id, name, hidden, words(count)")
+    .is("deleted_at", null)             // 삭제 대기 중인 것은 관리자에게도 단어 탭에서는 안 보인다
     .order("name");
   if (error) { box.innerHTML = `<p class="note">단어장을 불러오지 못했어요.</p>`; return; }
   if (!data.length) { box.innerHTML = `<p class="note">아직 단어장이 없어요.</p>`; return; }

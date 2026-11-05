@@ -131,8 +131,10 @@ document.querySelectorAll("#voiceSeg button").forEach(b => b.addEventListener("c
   load();
 }));
 window.addEventListener("hcu:tab", e => { if (e.detail === "voice") load(); });
+/* 관리자 화면에서 2단계 인증을 마치면 건의함 관리 버튼도 연다 */
+window.addEventListener("hcu:admin-ok", () => { admin = true; $("pendingBtn").hidden = false; load(); });
 onProfile(p => {
-  admin = p.isAdmin;
+  admin = p.isAdmin && p.adminOk;
   $("pendingBtn").hidden = !admin;
   if (!admin && sort === "pending") sort = "top";
   load();
