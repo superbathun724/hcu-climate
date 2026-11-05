@@ -126,7 +126,8 @@ function ask() {
   const level = askLevel(w);
   const type = pick(typesForLevel(w, level));
   const q = question(w, type);
-  cur = { w, level, type };
+  // 문제를 낸 시각을 서버에 남긴다(너무 빠른 자동 풀이 거르기, sql/04_study.sql). 답하기 전에 끝나 있으면 된다.
+  cur = { w, level, type, issued: db.rpc("issue_question", { p_word: w.id }).then(() => {}, () => {}) };
   const mode = level > mine ? " · 도전" : level < mine ? " · 복습" : "";
 
   $("stHead").textContent = `${set.name} · ${idx + 1} / ${queue.length}`;
@@ -161,6 +162,7 @@ async function submit(answer) {
 
   let res, body;
   try {
+    await cur.issued;
     const { data: { session } } = await db.auth.getSession();
     res = await fetch("/api/answer", {
       method: "POST",
@@ -183,6 +185,18 @@ async function submit(answer) {
     showResult("bad", body.error || "채점하지 못했어요. 잠시 뒤에 다시 해 주세요.");
     $("stInput").disabled = $("stGo").disabled = $("stSkip").disabled = false;
     $("stNext").hidden = true;
+    return;
+  }
+
+  if (body.locked) {                                  // 답 간격이 기계 같아 잠김
+    window.dispatchEvent(new Event("hcu:locked"));
+    return;
+  }
+  if (body.throttled) {                               // 코인 없이 채점만. 단계·날짜는 그대로라 다시 풀면 받는다
+    stats.total++; stats.right++;
+    showResult("good", body.throttled === "fast"
+      ? "맞았어요! 다만 너무 빨리 답해서 이번엔 코인이 없어요. 다음에 다시 풀면 받을 수 있어요."
+      : "맞았어요! 코인은 1분에 20문제까지 받아요. 잠깐 쉬었다가 다시 풀면 받을 수 있어요.", body.answer);
     return;
   }
 

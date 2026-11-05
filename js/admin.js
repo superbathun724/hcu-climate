@@ -229,12 +229,14 @@ const REASON = {
   "tap-pattern": "누르는 패턴이 기계 같음",
   "too-fast": "사람 속도보다 훨씬 많이 보냄(서버)",
   "too-many": "하루에 사람이 낼 수 없는 만큼 누름(서버)",
+  "quiz-pattern": "단어 문제 답하는 간격이 기계처럼 일정함(서버)",
 };
 const DETAIL = d => !d ? "" :
   d.reason === "regular-interval" ? `간격이 일정함 · 평균 ${d.mean_ms}ms · 흔들림 ${Math.round(d.cv * 100)}%` :
   d.reason === "same-spot-fast" ? `같은 자리 · 초당 ${d.per_sec}번` :
   d.reason === "synthetic" ? "스크립트가 만든 누름" :
   d.sent ? `${d.sent}번을 보냄(허용 ${d.allowed}) · ${d.strikes}회` :
+  d.mean_s ? `최근 ${d.n}번 · 평균 ${d.mean_s}초 간격 · 흔들림 ${Math.round(d.cv * 100)}%` :
   d.taps_today ? `오늘 ${Number(d.taps_today).toLocaleString()}번(기준 ${Number(d.max).toLocaleString()}번)` : "";
 
 async function loadLocks() {
