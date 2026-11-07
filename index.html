@@ -49,7 +49,7 @@
       <select id="selClass"><option value="">불러오는 중…</option></select>
       <label for="selClub">동아리</label>
       <select id="selClub"><option value="">불러오는 중…</option></select>
-      <p class="fine">반과 동아리는 가입한 뒤에 바꿀 수 없어요. 잘못 골랐다면 관리자에게 알려 주세요.</p>
+      <p class="fine">반과 동아리는 가입한 뒤에 바꿀 수 없어요. 선생님은 반에서 "교사"를 골라 주세요(동아리는 지도하는 동아리를 골라도 돼요).</p>
       <label class="agree"><input id="agree" type="checkbox"> <span><a href="privacy.html" target="_blank">개인정보처리방침</a>에 동의해요</span></label>
     </div>
 
@@ -67,8 +67,8 @@
   <div id="lockScreen" hidden>
     <div class="box">
       <h2>계정이 잠겼어요</h2>
-      <p>너무 빠르거나 기계처럼 일정한 누름이 감지되어 자동으로 잠겼어요. 관리자가 확인한 뒤 풀어 줘요.</p>
-      <p>직접 누른 거라면 관리자에게 말해 주세요. 잠긴 동안에는 코인을 벌거나 보낼 수 없어요.</p>
+      <p>사람이 하기 어려운 속도나 기계처럼 일정한 누름·답이 감지되어 자동으로 잠겼어요. 관리자가 확인한 뒤 풀어 줘요.</p>
+      <p>직접 한 거라면 관리자에게 알려 주세요: 2510609 · 2510203 · 2510132 (@hcu.hs.kr). 잠긴 동안에는 코인을 벌거나 보낼 수 없어요.</p>
       <a href="#" id="lockLogout">로그아웃</a>
     </div>
   </div>
@@ -106,37 +106,40 @@
     <div class="side">
       <div id="meters">
         <div class="meter">
-          <small>오늘 누른 횟수</small><b id="taps">0</b>
-          <div class="bar"><i id="bandBar"></i></div>
-          <small id="bandTxt"></small>
+          <small>남은 탭</small><b id="left">0</b>
+          <div class="bar"><i id="freeBar"></i></div>
+          <small id="leftTxt"></small>
         </div>
         <div class="meter">
-          <small>지금 한 번 누를 때</small><b id="rate">1코인</b>
-          <small>내일 아침 다시 1코인</small>
+          <small>오늘 누른 횟수</small><b id="taps">0</b>
+          <small>한 번 누를 때마다 1코인</small>
         </div>
       </div>
       <div class="pad">
-        <p class="note">많이 누를수록 한 번에 받는 코인이 줄어요. 단어 공부로 받는 코인은 줄지 않아요.</p>
-        <div class="band">
-          <div><span>1~300번</span><b>1</b></div>
-          <div><span>~900번</span><b>0.5</b></div>
-          <div><span>~2,100번</span><b>0.25</b></div>
-          <div><span>그 뒤</span><b>계속 절반</b></div>
+        <p class="note">하루 200번은 그냥 누를 수 있어요(매일 0시에 다시 채워져요). 더 누르려면 단어를 맞혀 <b>에너지</b>를 모아요. 에너지 1 = 탭 1번이고, 쓰지 않은 에너지는 다음 날에도 남아요.</p>
+        <div class="band energy">
+          <div><span>1단계</span><b>5</b></div>
+          <div><span>2단계</span><b>10</b></div>
+          <div><span>3단계</span><b>15</b></div>
+          <div><span>4단계</span><b>20</b></div>
+          <div><span>5단계</span><b>25</b></div>
+          <div><span>6단계</span><b>40</b></div>
         </div>
+        <p class="note">단어 하나를 맞히면 받는 에너지 (코인도 함께 받아요)</p>
       </div>
     </div>
   </section>
 
   <!-- ===== 단어 ===== -->
   <section id="word">
-    <p class="note">단어장을 고르고, 문제 단계와 개수를 골라 공부해요. 낮은 단계를 거치지 않아도 높은 단계에 바로 도전할 수 있어요. 맞히면 그 단계만큼 코인을 받고, 같은 단어는 하루에 한 번만 코인이 나와요.</p>
+    <p class="note">단어장을 고르고, 문제 단계와 개수를 골라 공부해요. 낮은 단계를 거치지 않아도 높은 단계에 바로 도전할 수 있어요. 맞히면 나온 문제만큼 코인과 <b>에너지</b>(게임 탭을 더 누를 수 있는 횟수, 코인의 5배)를 받아요. 같은 단어는 하루에 한 번만 받고, 그날 틀리거나 건너뛴 단어는 다음 날 다시 받아요. 복습에서 틀리면 한 단계 내려가요.</p>
     <div class="lv">
-      <div><span>1단계</span><b>1</b><small>뜻</small></div>
-      <div><span>2단계</span><b>2</b><small>철자</small></div>
-      <div><span>3단계</span><b>3</b><small>유의어</small></div>
-      <div><span>4단계</span><b>4</b><small>표현</small></div>
-      <div><span>5단계</span><b>5</b><small>예문</small></div>
-      <div><span>6단계</span><b>8</b><small>종합</small></div>
+      <div><span>1단계</span><b>1</b><small>뜻 · ⚡5</small></div>
+      <div><span>2단계</span><b>2</b><small>철자 · ⚡10</small></div>
+      <div><span>3단계</span><b>3</b><small>유의어 · ⚡15</small></div>
+      <div><span>4단계</span><b>4</b><small>표현 · ⚡20</small></div>
+      <div><span>5단계</span><b>5</b><small>예문 · ⚡25</small></div>
+      <div><span>6단계</span><b>8</b><small>종합 · ⚡40</small></div>
     </div>
 
     <h3>단어장</h3>

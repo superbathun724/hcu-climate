@@ -55,6 +55,15 @@ function emailFromInput() {
   return { email: id + suffix };
 }
 
+/* 학생·교사 구분 (서버 sql/01_schema.sql 의 email_role 과 같게. 진짜 검사는 서버가 한다)
+   학생 아이디 = 2510 + 1학년 반번호 3자리. 숫자가 아닌 아이디는 교사. */
+const STUDENT_ID = /^2510\d{3}$/;
+function roleOf(email) {
+  const id = email.split("@")[0];
+  return STUDENT_ID.test(id) ? "student" : /^\d+$/.test(id) ? "other" : "teacher";
+}
+const isTeacherOpt = sel => sel.selectedOptions[0]?.textContent === "교사";
+
 /* ---------- 화면 모드 ----------
    login  : 이메일 + 비밀번호
    join   : 이메일 + 비밀번호 + 반·동아리·동의
@@ -138,6 +147,12 @@ async function submit(e) {
 
     const class_id = Number($("selClass").value);
     const club_id = Number($("selClub").value);
+    const role = roleOf(email);
+    if (role === "other") return say("이 게임은 아이디가 2510으로 시작하는 학생과 선생님만 참여할 수 있어요.");
+    if (role === "teacher" && $("selClass").value && !isTeacherOpt($("selClass")))
+      return say('선생님은 반에서 "교사"를 골라 주세요.');
+    if (role === "student" && isTeacherOpt($("selClass"))) return say('학생은 "교사" 반을 고를 수 없어요. 내 반을 골라 주세요.');
+    if (role === "student" && isTeacherOpt($("selClub"))) return say('학생은 "교사" 동아리를 고를 수 없어요. 내 동아리를 골라 주세요.');
     if (!class_id) return say("반을 골라 주세요.");
     if (!club_id) return say("동아리를 골라 주세요.");
     if (!$("agree").checked) return say("개인정보처리방침에 동의해 주세요.");

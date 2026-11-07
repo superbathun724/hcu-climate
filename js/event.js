@@ -10,6 +10,7 @@ import { $, tick, onProfile, num1 } from "./ui.js";
 const POLL_MS = 15000;
 let ev = null;            // 지금 재난 (없으면 null)
 let lastId = null;
+let lastResult = null;    // 이미 알린 재난 결과(방어 성공/실패)
 let timer = 0;
 
 /** 지금 이 순간의 남은 시간(ms) */
@@ -38,8 +39,20 @@ async function poll() {
       ? `우리 반이 돕는 ${ev.region_name}에 재난(${ev.hazard})! ${mmss(leftMs(ev))} 동안 보내는 코인은 ${ev.mult}배예요.`
       : `${ev.region_name}에 재난(${ev.hazard})이 닥쳤어요. 지원 탭에서 ${ev.mult}배로 도울 수 있어요.`, "bad");
   }
-  // 재난이 끝남
-  if (prev && !ev) tick(`${prev.region_name} 재난이 끝났어요. 모은 대비율에서 ${num1(prev.drain)}%가 대응에 쓰였어요.`);
+  // 재난 결과 (한 번만). 처음 불러올 때 이미 지난 결과는 알리지 않는다.
+  const last = data?.last;
+  if (last && last.id !== lastResult) {
+    if (lastResult !== null || prev) {
+      const mine = window.hcuProfile?.regionId === last.region_id;
+      tick(last.result === "held"
+        ? `${last.region_name} 재난 방어 성공! 대비율이 50% 이상 남았어요.${mine ? ` 우리 ${window.hcuProfile?.className === "교사" ? "팀" : "반"} 순위에 1인당 +${last.bonus_pc}점.` : ""}`
+        : `${last.region_name} 재난을 막지 못했어요. 끝날 때 대비율이 50%보다 낮았어요.`, last.result === "held" ? "good" : "bad");
+    }
+    lastResult = last.id;
+  } else if (prev && !ev && !last) {
+    tick(`${prev.region_name} 재난이 끝났어요. 모은 대비율에서 ${num1(prev.drain)}%가 대응에 쓰였어요.`);
+  }
+  if (lastResult === null) lastResult = last?.id ?? 0;
 
   document.querySelector('#tabs [data-tab="send"]').classList.toggle("alert", !!ev);
   window.dispatchEvent(new CustomEvent("hcu:event", { detail: ev }));
@@ -51,5 +64,5 @@ setInterval(() => { if (ev) window.dispatchEvent(new CustomEvent("hcu:second", {
 onProfile(() => { poll(); clearInterval(timer); timer = setInterval(poll, POLL_MS); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") poll(); });
 window.addEventListener("hcu:sent", poll);
-window.addEventListener("hcu:signout", () => { clearInterval(timer); ev = null; lastId = null;
+window.addEventListener("hcu:signout", () => { clearInterval(timer); ev = null; lastId = null; lastResult = null;
   document.querySelector('#tabs [data-tab="send"]').classList.remove("alert"); });

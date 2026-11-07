@@ -5,17 +5,30 @@
    울산은 목록에 없다. 코인을 받을 수 있는 곳은 regions 표의 바깥 7곳뿐이다.
    순서: 재난 중인 지역(빨강, 맨 위) → 우리 반이 맡은 곳 → 나머지 반 번호 순.
    재난 중에는 보낸 코인이 2배로 들어가고, 그 지역 대비율이 재난 대응에 조금씩 쓰인다.
-   대비율은 100% 를 넘어도 쌓인다(비축). 막대는 100% 에서 멈추고 글자로 비축분을 보여 준다.
+   대비율은 100% 를 넘어 150% 까지 쌓인다(비축). 막대는 100% 에서 멈추고 글자로 비축분을 보여 준다.
+   재난 카드에는 그 지역의 실제 재난 사례와 효과가 있었던 대비를 출처와 함께 보여 준다(js/cases.js).
    ========================================================== */
 import { db } from "./config.js";
 import { $, esc, setBalance, getBalance, tick, onProfile, serverMsg, num1, shieldText } from "./ui.js";
 import { currentEvent, leftMs, liveShield, liveDrained, mmss } from "./event.js";
+import { CASES } from "./cases.js";
+
+const MAX = 150;          // 비축 상한 (sql shield_max 와 같게)
 
 let regions = [];     // [{id, name, hazard, shield, cls}]
 let myClass = 0;
 
 const SAFE = 50;
-const shieldLine = v => `대비율 ${shieldText(v)} · ` + (v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
+const shieldLine = v => `대비율 ${shieldText(v)} · ` +
+  (v >= MAX ? "가득 찼어요(최대 150%)" : v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
+
+/* 실제 사례 (재난 중인 카드에만) */
+function caseBox(id) {
+  const c = CASES[id];
+  if (!c) return "";
+  return `<div class="case"><b>실제로 있었던 일</b> ${esc(c.event)}<br><b>효과가 있었던 대비</b> ${esc(c.measure)}
+    <div class="src">출처: ${c.src.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>`).join(" · ")}</div></div>`;
+}
 
 function card(r, ev) {
   const mine = r.cls === myClass;
@@ -28,7 +41,8 @@ function card(r, ev) {
     <div class="d">${esc(r.hazard)}</div>
     <div class="shield"><div class="bar${sh > 100 ? " over" : ""}"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
       <div class="d sv">${shieldLine(sh)}</div>
-      ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요 · <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}%</div>` : ""}</div>
+      ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요 · <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}% · 끝날 때 50% 이상이면 방어 성공</div>` : ""}</div>
+    ${hit ? caseBox(r.id) : ""}
     <div class="give"><button class="btn coin" data-amt="10">10</button><button class="btn coin" data-amt="50">50</button><button class="btn coin" data-amt="100">100</button></div>
     <div class="give own"><input type="number" inputmode="numeric" min="1" step="1" placeholder="직접 입력"><button class="btn" data-amt="own">보내기</button></div>
   </div>`;
@@ -115,9 +129,11 @@ $("sendList").addEventListener("click", async e => {
   el.querySelector(".sv").textContent = shieldLine(r.shield);
   inp.value = "";
   setBalance(data.balance);
+  const sentAmt = data.amount ?? amt;
+  const part = sentAmt < amt ? ` (150%까지 남은 자리만큼 ${sentAmt}코인만 보냈어요)` : "";
   tick(data.mult > 1
-    ? `${r.name}에 ${amt}코인 → 재난 중이라 ${data.mult}배! 대비율 +${num1(amt * data.mult / 20)}%`
-    : `${r.name}에 ${amt}코인을 보냈어요. 대비율 +${num1(amt / 20)}%`, "good");
+    ? `${r.name}에 ${sentAmt}코인 → 재난 중이라 ${data.mult}배! 대비율 +${num1(sentAmt * data.mult / 20)}%${part}`
+    : `${r.name}에 ${sentAmt}코인을 보냈어요. 대비율 +${num1(sentAmt / 20)}%${part}`, "good");
   window.dispatchEvent(new Event("hcu:sent"));
 });
 

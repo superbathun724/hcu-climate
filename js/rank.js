@@ -1,5 +1,6 @@
 /* ==========================================================
-   rank.js — 순위 탭: 반 순위, 동아리 순위 (이번 기간에 보낸 코인의 1인당 평균)
+   rank.js — 순위 탭: 반 순위, 동아리 순위 (이번 기간 기여의 1인당 평균)
+   기여 = 보낸 코인 × 그때 배수(재난 중 2배). 반 순위에는 재난 방어 보너스도 더한다(sql rank_classes).
    기간(주·일·월)은 서버(sql/03_game.sql 의 rank_unit)가 정하고, 화면은 남은 시간만 센다.
    맨 위 카드는 우리 반이 돕는 지역의 대비율(팀 페이지 역할).
    서버는 팀 단위 숫자만 준다. 학생 개인 이름·이메일은 오지 않는다.
@@ -54,16 +55,16 @@ async function load() {
   if (mine && !mine.region_name) {
     $("myRegion").innerHTML = `
       <small>${esc(mine.class_name)} 팀 · 맡은 지역 없이 어디든 도와요</small>
-      <div class="big">${UNIT[unit] ?? "이번 기간"} ${Number(mine.sent).toLocaleString()}코인</div>
+      <div class="big">${UNIT[unit] ?? "이번 기간"} 기여 ${Number(mine.sent).toLocaleString()}</div>
       <small>가입 ${mine.members}명 · 한 사람당 ${mine.per_capita == null ? "–" : num1(mine.per_capita)} · 오늘 ${Number(mine.sent_today).toLocaleString()}코인</small>`;
   } else $("myRegion").innerHTML = `
     <small>우리 ${me.className === "교사" ? "팀" : "반"}이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
     <div class="big">대비율 ${shieldText(sh)}</div>
     <div class="bar"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
-    <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 ${me.className === "교사" ? "팀" : "반"} 지원 ${Number(mine?.sent_today ?? 0).toLocaleString()}코인</small>`;
+    <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 ${me.className === "교사" ? "팀" : "반"} 기여 ${Number(mine?.sent_today ?? 0).toLocaleString()}${Number(mine?.bonus) ? ` · 이번 기간 방어 보너스 ${Number(mine.bonus).toLocaleString()}` : ""}</small>`;
 
   const rows = kind === "class"
-    ? cls.data.map(r => ({ id: r.class_id, t: r.region_name ? `${r.class_name} · ${r.region_name}` : r.class_name, m: r.members, sent: r.sent, v: r.per_capita, me: r.class_id === me.classId }))
+    ? cls.data.map(r => ({ id: r.class_id, t: r.region_name ? `${r.class_name} · ${r.region_name}` : r.class_name, m: r.members, sent: r.sent, bonus: Number(r.bonus) || 0, v: r.per_capita, me: r.class_id === me.classId }))
     : (clubs.data ?? []).map(r => ({ id: r.club_id, t: r.club_name, m: r.members, sent: r.sent, v: r.per_capita, me: r.club_id === me.clubId }));
 
   // 같은 평균이면 같은 등수
@@ -71,7 +72,7 @@ async function load() {
   $("rankList").innerHTML = rows.map((r, i) => {
     if (r.v !== prev) { rank = i + 1; prev = r.v; }
     return `<div class="rk${r.me ? " me" : ""}"><span class="n">${r.v == null ? "–" : rank}</span>
-      <div class="m"><div class="t">${esc(r.t)}</div><div class="d">가입 ${r.m}명 · 이번 기간 ${Number(r.sent).toLocaleString()}코인</div></div>
+      <div class="m"><div class="t">${esc(r.t)}</div><div class="d">가입 ${r.m}명 · 이번 기간 기여 ${Number(r.sent).toLocaleString()}${r.bonus ? ` · 방어 보너스 ${r.bonus.toLocaleString()}` : ""}</div></div>
       <span class="v">${r.v == null ? "–" : num1(r.v)}</span></div>`;
   }).join("") || `<p class="note">아직 기록이 없어요.</p>`;
 }

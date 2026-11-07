@@ -5,10 +5,10 @@
 --
 -- 규칙 (복습 날짜를 기다리지 않는다. 고른 단어장을 언제든, 고른 단계로 공부한다)
 --   p_level = 이번 문제의 단계(학생이 고른 단계, "내 단계대로"면 그 단어의 지금 단계)
---   - 맞히면: p_level 단계만큼 코인 (1·2·3·4·5·8)
+--   - 맞히면: 단계만큼 코인 (1·2·3·4·5·8) + 탭 에너지 (코인의 5배: 5·10·15·20·25·40)
 --       p_level ≥ 지금 단계(도전) → p_level 의 다음 단계로 오른다(건너뛸 수 있다)
 --       p_level < 지금 단계(복습) → 단계 그대로
---   - 틀리면: 복습(p_level ≤ 지금 단계)이면 1단계로, 도전(p_level > 지금 단계)이면 그대로
+--   - 틀리면: 복습(p_level ≤ 지금 단계)이면 한 단계 내려가고, 도전(p_level > 지금 단계)이면 그대로
 --   - 코인은 고른 단계가 아니라 실제로 나온 문제 유형의 단계로 매긴다(p_pay).
 --   - 같은 단어는 하루(한국 날짜)에 한 번만 코인을 받고 단계가 바뀐다.
 --   - 그날 한 번 틀리거나 건너뛴 단어는(정답을 보여 주므로) 그날 다시 맞혀도 코인·단계가 그대로다.
@@ -67,6 +67,11 @@ returns integer language sql immutable as $$
   select (array[1,2,3,4,5,8])[least(greatest(coalesce(p_level,0),0),5) + 1]
 $$;
 
+-- 단계별 에너지: 맞히면 코인과 함께 탭 에너지도 생긴다(에너지 1 = 탭 1번 = 1코인, 03_game.sql)
+-- 코인의 5배. 1단계 5 · 2단계 10 · 3단계 15 · 4단계 20 · 5단계 25 · 6단계 40  (js/quiz-core.js ENERGY 와 같게)
+create or replace function public.word_energy(p_level integer)
+returns integer language sql immutable as $$ select 5 * public.word_coins(p_level) $$;
+
 -- 예전 3칸짜리(단계 없이) 함수는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
 -- 예전 함수(칸 수가 다른 것)는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
 drop function if exists public.record_answer(uuid, bigint, boolean);
@@ -85,6 +90,8 @@ declare
   v_before smallint;
   v_lv smallint;
   v_coins integer := 0;
+  v_energy integer := 0;
+  v_energy_now integer;
   v_already boolean := false;
   v_balance numeric;
   v_issued timestamptz;
@@ -148,14 +155,15 @@ begin
     elsif pr.last_wrong_day = v_today then
       null;                                               -- 오늘 한 번 틀림(건너뛰기 포함): 정답을 본 뒤라 코인·단계 그대로
     else
-      v_coins := public.word_coins(least(v_lv, coalesce(p_pay, v_lv)));
+      v_coins  := public.word_coins(least(v_lv, coalesce(p_pay, v_lv)));
+      v_energy := public.word_energy(least(v_lv, coalesce(p_pay, v_lv)));
       if v_lv >= pr.srs_level then
         pr.srs_level := least(v_lv + 1, 5);               -- 도전 성공: 고른 단계의 다음으로
       end if;
       pr.last_correct_day := v_today;
     end if;
   else
-    if v_lv <= pr.srs_level then pr.srs_level := 0; end if;   -- 복습에서 틀림
+    if v_lv <= pr.srs_level then pr.srs_level := greatest(pr.srs_level - 1, 0); end if;   -- 복습에서 틀림: 한 단계만 내린다
     pr.wrong_count := pr.wrong_count + 1;
     if pr.last_correct_day is distinct from v_today then pr.last_wrong_day := v_today; end if;
   end if;
@@ -170,13 +178,13 @@ begin
   where user_id = p_user and word_id = p_word;
 
   update public.players
-     set balance = balance + v_coins, earned_words = earned_words + v_coins
+     set balance = balance + v_coins, earned_words = earned_words + v_coins, energy = energy + v_energy
    where user_id = p_user
-  returning balance into v_balance;
+  returning balance, energy into v_balance, v_energy_now;
 
   return jsonb_build_object(
     'correct', p_correct, 'level_before', v_before, 'level', pr.srs_level, 'asked', v_lv,
-    'coins', v_coins, 'already_today', v_already,
+    'coins', v_coins, 'energy_gain', v_energy, 'energy', v_energy_now, 'already_today', v_already,
     'after_wrong', p_correct and not v_already and v_coins = 0,
     'balance', v_balance);
 end;

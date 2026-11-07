@@ -71,7 +71,7 @@ export function tick(text, kind = "") {
 export const kstToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 
 /* 자정(한국 시각)을 넘기면 "hcu:newday" 를 한 번 알린다.
-   화면을 켜 둔 채 밤을 넘기거나, 폰에서 잠들었던 탭이 아침에 깨어나도 하루 기록(누른 횟수·효율·
+   화면을 켜 둔 채 밤을 넘기거나, 폰에서 잠들었던 탭이 아침에 깨어나도 하루 기록(누른 횟수·무료 탭·
    오늘 받은 단어 코인)을 새로 읽게 하려는 것. 브라우저가 백그라운드 타이머를 멈추므로
    화면으로 돌아올 때도 한 번 더 본다. */
 let today = kstToday();

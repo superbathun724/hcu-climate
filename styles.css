@@ -90,6 +90,11 @@ section.on{display:block}
 .band span{display:block;font-size:.7rem;color:var(--sub)}
 .band b{font-size:.95rem}
 .band .now{outline:2px solid var(--coin)}
+.band.energy{grid-template-columns:repeat(3,minmax(0,1fr))}
+.case{margin-top:8px;padding:8px 10px;border-radius:10px;background:#fff6f4;font-size:.8rem;line-height:1.5;color:#4a3a36}
+.case b{color:#a8382a;margin-right:4px}
+.case .src{margin-top:4px;font-size:.72rem;color:var(--sub)}
+.case .src a{color:inherit}
 
 /* ---------- 목록 행 ---------- */
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border-radius:14px;padding:12px;margin-bottom:8px}
@@ -293,7 +298,7 @@ footer{padding:12px var(--gut) 18px;font-size:.75rem;color:var(--sub);text-align
   #scene{height:min(520px,60vh);border-radius:18px}
   #game .side #meters{padding:0 0 8px}
   #game .side .pad{padding:0}
-  #game .side .band{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #game .side .band{grid-template-columns:repeat(3,minmax(0,1fr))}
   #game.on > *{min-width:0}
   #sendList{grid-template-columns:repeat(3,minmax(0,1fr))}
 }

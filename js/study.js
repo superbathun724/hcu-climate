@@ -5,13 +5,13 @@
    시작 전에 고른다: 어느 단계 문제로(내 단계대로 또는 1~6단계) 몇 개(10·20·30·전체) 풀지.
    1~6단계를 고르면 모든 단어를 그 단계 문제로 낸다. 낮은 단계를 거치지 않았어도 바로 도전할 수 있다.
      도전(고른 단계 ≥ 내 단계): 맞히면 고른 단계의 다음 단계로, 틀려도 단계 그대로
-     복습(고른 단계 < 내 단계): 맞혀도 단계 그대로, 틀리면 1단계로
+     복습(고른 단계 < 내 단계): 맞혀도 단계 그대로, 틀리면 한 단계 내려감
    코인은 고른 단계만큼, 같은 단어는 하루에 한 번. 실제 판정은 서버(sql/04_study.sql)가 한다.
    답은 /api/answer 로 보내고, 맞았는지·코인·새 단계는 서버가 정해서 돌려준다.
    ========================================================== */
 import { db } from "./config.js";
 import { $, esc, setBalance, getBalance, coinPop, tick, kstToday } from "./ui.js";
-import { typesForLevel, question, COINS, coinLevel } from "./quiz-core.js";
+import { typesForLevel, question, COINS, ENERGY, coinLevel } from "./quiz-core.js";
 
 const COUNTS = [10, 20, 30, 0];          // 0 = 전체
 const TYPE_NAME = ["뜻", "철자", "유의어", "표현", "예문", "종합"];
@@ -21,7 +21,7 @@ let queue = [];        // 이번 회차 단어들
 let idx = 0;
 let cur = null;        // {w, level, type}
 let busy = false;
-let stats = { right: 0, total: 0, coins: 0 };
+let stats = { right: 0, total: 0, coins: 0, energy: 0 };
 let words = [];        // 이 단어장의 단어 (내 진도 포함)
 let pickLevel = -1;    // -1 = 내 단계대로, 0~5 = 모든 단어를 그 단계 문제로
 let pickCount = 20;    // 0 = 전체
@@ -115,7 +115,7 @@ async function begin() {
   queue = [...fresh, ...done];
   if (pickCount) queue = queue.slice(0, pickCount);
   idx = 0;
-  stats = { right: 0, total: 0, coins: 0 };
+  stats = { right: 0, total: 0, coins: 0, energy: 0 };
   $("stSetup").hidden = true;
   if (!queue.length) { finish("이 단어장에는 낼 수 있는 문제가 없어요."); return; }
   await window.hcuFlushTaps?.();       // 코인 숫자를 서버와 맞춰 둔다
@@ -147,7 +147,7 @@ function ask() {
   $("stType").textContent = `${level + 1}단계${mode} · ${q.label} · ` +
     (doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요"
       : wrongToday(w) ? "오늘 한 번 틀린 단어라 코인은 내일 받아요"
-      : `맞히면 ${COINS[coinLevel(level, type)]}코인`);
+      : `맞히면 ${COINS[coinLevel(level, type)]}코인 · 에너지 ${ENERGY[coinLevel(level, type)]}`);
 
   if (q.cloze) {
     $("stBig").innerHTML = `${esc(q.cloze.before)}<span class="blank">${"_".repeat(Math.max(3, q.cloze.answer.length))}</span>${esc(q.cloze.after)}`;
@@ -229,17 +229,18 @@ async function submit(answer) {
   // 코인은 맞힐 때마다 서버 지갑에 바로 들어간다(record_answer). 중간에 그만둬도 이미 받은 코인은 그대로.
   if (body.balance != null) setBalance(body.balance);
   if (body.coins) coinPop("stCoinChip", body.coins);
+  if (body.energy != null) window.dispatchEvent(new CustomEvent("hcu:energy", { detail: body.energy }));   // 게임 탭의 남은 탭 수
   stats.total++;
-  if (body.correct) { stats.right++; stats.coins += body.coins; }
+  if (body.correct) { stats.right++; stats.coins += body.coins; stats.energy += body.energy_gain ?? 0; }
 
   const moved = body.level > body.level_before ? `${body.level + 1}단계로 올랐어요.`
-              : body.level < body.level_before ? "1단계로 돌아가요." : `단계는 ${body.level + 1}단계 그대로예요.`;
+              : body.level < body.level_before ? `${body.level + 1}단계로 한 단계 내려가요.` : `단계는 ${body.level + 1}단계 그대로예요.`;
   if (body.correct) {
     showResult("good", body.already_today
       ? `맞았어요! 이 단어는 오늘 코인을 이미 받았어요.`
       : body.after_wrong
       ? `맞았어요! 오늘 한 번 틀린 단어라 코인과 단계는 내일 다시 도전해요.`
-      : `맞았어요! +${body.coins}코인이 들어왔어요 · ${moved}`, body.answer);
+      : `맞았어요! +${body.coins}코인, 에너지 +${body.energy_gain ?? 0}(탭 ${body.energy_gain ?? 0}번) · ${moved}`, body.answer);
   } else {
     showResult("bad", `${answer ? "틀렸어요." : "괜찮아요."} ${moved}`, body.answer);
   }
@@ -267,12 +268,12 @@ function finish(note) {
   $("stHead").textContent = set ? set.name : "";
   $("stDone").innerHTML = note ? `<p class="note">${esc(note)}</p>` : `
     <div class="big">${stats.right} / ${stats.total}</div>
-    <p class="note">맞힌 단어 · 이번에 받은 코인 <b>+${stats.coins}</b></p>
+    <p class="note">맞힌 단어 · 이번에 받은 코인 <b>+${stats.coins}</b> · 에너지 <b>+${stats.energy}</b></p>
     <div class="qbtns"><button class="btn ghost" id="stQuit">닫기</button><button class="btn coin" id="stAgain">다시 고르기</button></div>`;
   $("stDone").hidden = false;
   $("stAgain")?.addEventListener("click", setup);
   $("stQuit")?.addEventListener("click", close);
-  if (!note && stats.coins) tick(`단어 공부로 ${stats.coins}코인을 받았어요.`, "good");
+  if (!note && stats.coins) tick(`단어 공부로 ${stats.coins}코인과 에너지 ${stats.energy}(탭 ${stats.energy}번)를 받았어요.`, "good");
 }
 
 function close() {

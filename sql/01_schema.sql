@@ -29,6 +29,23 @@ returns boolean language sql immutable as $$
 $$;
 
 
+-- ---------- 학생·교사 구분 ----------
+-- 학생 이메일의 @ 앞은 "2510 + 1학년 반번호 3자리"(예: 2510609). 이 모양이면 학생이다.
+-- 숫자로만 된 다른 아이디(다른 학년)는 받지 않는다. 숫자가 아닌 아이디는 교사로 본다.
+-- 학년이 바뀌면 여기 한 곳만 고친다.
+create or replace function public.student_id_pattern()
+returns text language sql immutable as $$ select '^2510[0-9]{3}$' $$;
+
+-- 'student' | 'teacher' | 'other'(숫자 아이디지만 이 학년이 아님)
+create or replace function public.email_role(p_email text)
+returns text language sql immutable as $$
+  select case
+    when split_part(lower(p_email), '@', 1) ~ public.student_id_pattern() then 'student'
+    when split_part(lower(p_email), '@', 1) ~ '^[0-9]+$' then 'other'
+    else 'teacher' end
+$$;
+
+
 -- ---------- 지역 (반마다 하나씩 돕는 바깥 지역) ----------
 -- shield = 대비율(%). 50 이상이면 재난을 버틴다. 코인으로만 오른다(뒤 파일에서).
 create table if not exists public.regions (
@@ -144,6 +161,8 @@ as $$
 declare
   v_class smallint;
   v_club  smallint;
+  v_role  text;
+  v_teacher_class boolean;
 begin
   if not public.is_school_email(new.email) then
     raise exception '학교 이메일(@%)로만 가입할 수 있어요.', public.school_domain()
@@ -162,6 +181,22 @@ begin
   end if;
   if v_club is null or not exists (select 1 from public.clubs where id = v_club) then
     raise exception '동아리를 다시 골라 주세요.' using errcode = 'P0001';
+  end if;
+
+  -- 학생은 학생 반·동아리만, 교사는 "교사" 반만 (동아리는 지도하는 동아리를 골라도 된다)
+  v_role := public.email_role(new.email);
+  if v_role = 'other' then
+    raise exception '이 게임은 아이디가 2510으로 시작하는 학생과 선생님만 참여할 수 있어요.' using errcode = 'P0001';
+  end if;
+  v_teacher_class := exists (select 1 from public.classes where id = v_class and name = '교사');
+  if v_role = 'student' and v_teacher_class then
+    raise exception '학생은 "교사" 반을 고를 수 없어요. 내 반을 골라 주세요.' using errcode = 'P0001';
+  end if;
+  if v_role = 'student' and exists (select 1 from public.clubs where id = v_club and name = '교사') then
+    raise exception '학생은 "교사" 동아리를 고를 수 없어요. 내 동아리를 골라 주세요.' using errcode = 'P0001';
+  end if;
+  if v_role = 'teacher' and not v_teacher_class then
+    raise exception '선생님은 반에서 "교사"를 골라 주세요.' using errcode = 'P0001';
   end if;
 
   insert into public.profiles (user_id, class_id, club_id)
@@ -186,6 +221,10 @@ begin
   if new.email is distinct from old.email and not public.is_school_email(new.email) then
     raise exception '학교 이메일(@%)로만 바꿀 수 있어요.', public.school_domain()
       using errcode = 'P0001';
+  end if;
+  -- 학생 ↔ 교사가 바뀌는 이메일 변경은 막는다(교사 반에 학생이 들어가는 길)
+  if new.email is distinct from old.email and public.email_role(new.email) <> public.email_role(old.email) then
+    raise exception '학생·교사 구분이 바뀌는 이메일로는 바꿀 수 없어요.' using errcode = 'P0001';
   end if;
   return new;
 end;
@@ -251,5 +290,11 @@ grant  execute on function public.admin_ok()         to authenticated;
 
 
 -- ---------- 확인 ----------
+-- 규칙에 안 맞게 이미 가입한 계정 (학생인데 교사 반·동아리, 교사인데 학생 반, 다른 학년):
+-- select u.email, p.class_id, c.name as club from public.profiles p join auth.users u on u.id = p.user_id
+--   join public.clubs c on c.id = p.club_id
+--  where (public.email_role(u.email) = 'student' and (p.class_id = 8 or c.name = '교사'))
+--     or (public.email_role(u.email) = 'teacher' and p.class_id <> 8)
+--     or public.email_role(u.email) = 'other';
 -- select c.id as 반, r.name as 지역 from public.classes c join public.regions r on r.id = c.region_id order by 1;
 -- select count(*) as 동아리수 from public.clubs;   -- 22 (학생 21 + 교사)

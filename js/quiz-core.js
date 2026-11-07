@@ -18,6 +18,7 @@ import { checkMeaning, checkSpelling, checkRelated, normEn, meaningAnswer, relat
 
 export const MAX_LEVEL = 5;
 export const COINS = [1, 2, 3, 4, 5, 8];          // 단계별 코인 (sql/04_study.sql 의 word_coins 와 같게)
+export const ENERGY = COINS.map(c => c * 5);      // 단계별 탭 에너지 (sql word_energy 와 같게): 5·10·15·20·25·40
 
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

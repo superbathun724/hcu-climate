@@ -6,7 +6,7 @@
 
    누를 때마다 서버에 보내지 않는다. 2초마다 "몇 번 눌렀다"를 모아 보내고(submit_taps),
    코인은 서버가 계산한 값으로 맞춘다. 화면의 숫자는 그 사이를 잇는 어림값일 뿐이다.
-   하루 한도는 없고, 많이 누를수록 한 번에 받는 코인이 절반씩 준다(sql/03_game.sql).
+   한 번에 1코인. 하루 무료 200번 + 단어를 맞혀 모은 에너지만큼 누를 수 있다(sql/03_game.sql, 04_study.sql).
 
    매크로 감지: 최근 30번의 누름을 보고
      - 간격이 기계처럼 일정함(평균 250ms 미만, 흔들림 6% 미만)
@@ -21,37 +21,29 @@ import { $, setBalance, getBalance, onProfile, tick, num1, shieldText } from "./
 import { currentEvent, liveShield } from "./event.js";
 import { SCENES, wallSVG, WALL_FOOT, WALL_RISE } from "./scenes.js";
 
-const BAND = 300;                 // sql tap_band() 와 같게
 const FLUSH_MS = 2000;
 const CHECK_N = 30;               // 매크로 검사에 쓰는 최근 누름 수
-
-/* 오늘 taps 번 누른 상태가 몇 번째 구간인가 (구간마다 길이 2배, 효율 절반) */
-function bandOf(taps) {
-  let k = 0, start = 0, len = BAND;
-  while (taps >= start + len) { start += len; len *= 2; k++; }
-  return { k, start, len };
-}
-const rateAt = taps => 1 / 2 ** bandOf(taps).k;
-/* sql tap_coins() 와 같은 계산 */
-function coinsFor(start, n) {
-  let c = 0;
-  for (let i = 0; i < n; i++) c += rateAt(start + i);
-  return c;
-}
+const FREE_DAILY = 200;           // 하루 무료 탭 (sql tap_free_daily 와 같게. 막대 그림에만 쓴다 — 실제 수는 서버 값)
 
 let ready = false;    // 서버에서 오늘 상태를 받기 전에는 누르지 않는다
 let taps = 0;         // 오늘 누른 횟수 (보내지 않은 것 포함)
+let freeLeft = 0;     // 오늘 남은 무료 탭 (서버 값 - 아직 안 보낸 것)
+let energy = 0;       // 에너지 = 무료를 다 쓴 뒤 누를 수 있는 횟수 (단어를 맞혀 얻는다)
 let pending = 0;      // 아직 서버에 안 보낸 횟수
 let inflight = null;  // 보내는 중인 요청
 let token = "";       // 페이지를 닫을 때 쓰는 로그인 토큰
 
 function draw() {
-  const b = bandOf(taps), r = rateAt(taps);
   $("taps").textContent = taps.toLocaleString();
-  $("rate").textContent = `${r >= 0.01 ? r : "0.01 미만"}코인`;
-  $("bandBar").style.width = ((taps - b.start) / b.len * 100) + "%";
-  $("bandTxt").textContent = `${(b.start + b.len - taps).toLocaleString()}번 더 누르면 효율이 절반이 돼요`;
-  document.querySelectorAll(".band div").forEach((d, i) => d.classList.toggle("now", i === Math.min(b.k, 3)));
+  $("left").textContent = (freeLeft + energy).toLocaleString();
+  $("freeBar").style.width = Math.min(100, freeLeft / FREE_DAILY * 100) + "%";
+  $("leftTxt").textContent = `오늘 무료 ${freeLeft.toLocaleString()} · 에너지 ${energy.toLocaleString()}`;
+}
+/* 서버가 알려 준 남은 수에서, 그 뒤로 더 누른(아직 안 보낸) 만큼 뺀다. 무료부터 쓴다. */
+function setLeft(free, en, used) {
+  const fromFree = Math.min(free, used);
+  freeLeft = free - fromFree;
+  energy = Math.max(0, en - (used - fromFree));
 }
 
 /* ---------- 지역 풍경 ---------- */
@@ -115,8 +107,8 @@ async function load(retry = 1) {
     tick("게임 기록을 불러오지 못했어요. 새로고침해 주세요.", "bad"); return;
   }
   taps = data.taps_today + pending;
-  if (pending) setBalance(Number(data.balance) + coinsFor(data.taps_today, pending));
-  else setBalance(data.balance);
+  setBalance(Number(data.balance) + pending);
+  setLeft(data.free_left, data.energy, pending);
   if (data.locked) return window.dispatchEvent(new Event("hcu:locked"));
   ready = true;
   draw();
@@ -153,17 +145,21 @@ async function flush() {
     }
     // 서버 값 + 보내는 동안 더 누른 것
     taps = data.taps_today + pending;
-    setBalance(Number(data.balance) + coinsFor(data.taps_today, pending));
-    if (data.accepted < n) tick("너무 빨리 눌렀어요. 일부는 세지 않았어요.", "bad");
+    setBalance(Number(data.balance) + pending);
+    setLeft(data.free_left, data.energy, pending);
+    if (data.accepted < n) tick("너무 빨리 눌렀거나 남은 탭보다 많이 눌렀어요. 일부는 세지 않았어요.", "bad");
     draw();
   })();
   await inflight;
   inflight = null;
 }
 window.hcuFlushTaps = flush;
+/* 단어를 맞혀 에너지가 늘면(study.js) 남은 탭을 바로 늘린다. 정확한 값은 다음 저장 때 서버 값으로 맞춰진다. */
+window.addEventListener("hcu:energy", e => { energy = Math.max(0, Number(e.detail) || 0); if (ready) draw(); });
 
 /* 화면이 매크로 같다고 본 뒤 잠깐 쉬기. 시간이 지나면 저절로 다시 누를 수 있다. */
 let pauseTimer = null;
+let emptyAt = 0;          // "남은 탭이 없어요" 안내를 너무 자주 띄우지 않게
 function pauseUntil(iso) {
   const ms = new Date(iso).getTime() - Date.now();
   if (!(ms > 0)) return;
@@ -207,14 +203,19 @@ $("scene").addEventListener("pointerdown", e => {
     flush();
     return;
   }
-  const r = rateAt(taps);
+  if (freeLeft + energy <= 0) {                      // 남은 탭이 없음: 세지 않고 안내만
+    if (Date.now() - emptyAt > 4000) { emptyAt = Date.now(); tick("남은 탭이 없어요. 단어를 맞혀 에너지를 모으면 더 누를 수 있어요."); }
+    return;
+  }
+  const r = 1;
+  if (freeLeft > 0) freeLeft--; else energy--;
   taps++; pending++;
   setBalance(getBalance() + r);
   draw();
 
   const p = document.createElement("div");
   p.className = "pop";
-  p.textContent = r >= 1 ? "+1" : "+" + r;
+  p.textContent = "+" + r;
   const box = $("scene").getBoundingClientRect();
   p.style.left = (e.clientX - box.left - 10) + "px";
   p.style.top = (e.clientY - box.top - 20) + "px";
@@ -240,8 +241,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushOnLeave();
   else if (ready) load();                         // 돌아오면(자정을 넘겼을 수도) 서버 값으로 다시
 });
-/* 자정이 지나면 누른 횟수·효율을 서버 값(0부터)으로 다시. 켜 둔 채 밤을 넘긴 화면도 */
-window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 누를 때 받는 코인이 다시 1코인이에요."); } });
+/* 자정이 지나면 누른 횟수·무료 탭을 서버 값으로 다시. 켜 둔 채 밤을 넘긴 화면도 */
+window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 무료 탭 200번이 다시 채워졌어요."); } });
 window.addEventListener("pagehide", flushOnLeave);
 
 db.auth.onAuthStateChange((_e, session) => { token = session?.access_token ?? ""; });

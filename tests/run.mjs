@@ -3,7 +3,8 @@
    서버(DB) 규칙은 여기서 못 본다. 화면과 서버가 같이 쓰는 js/quiz-core.js, 채점 규칙(grade.js),
    단어 CSV 읽기·쓰기(csv.js)만 본다. 코인·단계 규칙을 고치면 여기도 같이 고친다.
    ========================================================== */
-import { typesForLevel, coinLevel, check, COINS } from "../js/quiz-core.js";
+import { typesForLevel, coinLevel, check, COINS, ENERGY } from "../js/quiz-core.js";
+import { CASES } from "../js/cases.js";
 import { checkMeaning } from "../js/grade.js";
 import { rowsToWords, wordsToCSV } from "../js/csv.js";
 
@@ -30,6 +31,13 @@ eq("4단계 본래 유형(표현)은 4코인", COINS[coinLevel(3, "phrase")], 4)
 eq("1단계 뜻 1코인", COINS[coinLevel(0, "meaning")], 1);
 eq("빈 답은 오답", check(rich, "spelling", "  "), false);
 eq("철자 정답", check(rich, "spelling", "Modest"), true);
+
+eq("에너지 = 코인 × 5", ENERGY, [5, 10, 15, 20, 25, 40]);
+eq("대신 낸 철자 문제 에너지 10", ENERGY[coinLevel(5, "spelling")], 10);
+
+/* ---- 재난 사례: 8곳 모두 문장 두 줄과 https 출처 ---- */
+eq("사례 8곳", Object.keys(CASES).map(Number), [1, 2, 3, 4, 5, 6, 7, 8]);
+eq("사례마다 출처", Object.values(CASES).every(c => c.event && c.measure && c.src.length && c.src.every(([t, u]) => t && u.startsWith("https://"))), true);
 
 /* ---- 뜻 채점 (voca-web grade.js 그대로) ---- */
 const consider = { senses: [{ pos: "동사", meaning: "~을 고려하다" }] };
