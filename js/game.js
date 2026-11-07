@@ -6,15 +6,13 @@
 
    누를 때마다 서버에 보내지 않는다. 2초마다 "몇 번 눌렀다"를 모아 보내고(submit_taps),
    코인은 서버가 계산한 값으로 맞춘다. 화면의 숫자는 그 사이를 잇는 어림값일 뿐이다.
-   한 번에 1코인. 하루 무료 200번 + 단어를 맞혀 모은 에너지만큼 누를 수 있다(sql/03_game.sql, 04_study.sql).
+   한 번에 1코인. 하루 무료 1,000번 + 단어를 맞혀 모은 에너지만큼 누를 수 있다(sql/03_game.sql, 04_study.sql).
 
-   매크로 감지: 최근 30번의 누름을 보고
-     - 간격이 기계처럼 일정함(평균 250ms 미만, 흔들림 6% 미만)
-     - 같은 자리(3px 안)를 사람이 못 낼 속도(초당 14번 넘게)로 누름
-     - 스크립트가 만든 가짜 누름(isTrusted=false)
-   이면 더 받지 않고 서버에 알린다(submit_taps 의 p_flag). 사람도 리듬을 타다 가끔 걸릴 수 있어서 바로 잠그지 않고
-   5분 동안 탭을 쉬게 한다. 24시간 안에 3번째면 서버가 잠그고 관리자가 풀어 준다.
-   이 검사는 화면 쪽이라 우회할 수 있다. 서버도 따로 "사람 속도보다 훨씬 많이"를 본다.
+   매크로 감지: 스크립트가 만든 가짜 누름(isTrusted=false)만 본다.
+   예전에는 "간격이 일정함·같은 자리를 빠르게"도 봤는데, 마우스로 꾸준히 누르는 사람이 걸려서 뺐다.
+   이제 누를 수 있는 횟수가 무료 탭 + 에너지로 정해져 있어서, 자동 클릭을 써도 더 벌 수 없다.
+   가짜 누름이면 5분 쉬게 하고(submit_taps 의 p_flag), 24시간 안에 3번째면 서버가 잠근다.
+   서버는 따로 "사람이 낼 수 없는 속도(초당 15번 넘게)"를 본다.
    ========================================================== */
 import { db, SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 import { $, setBalance, getBalance, onProfile, tick, num1, shieldText } from "./ui.js";
@@ -22,8 +20,7 @@ import { currentEvent, liveShield } from "./event.js";
 import { SCENES, wallSVG, WALL_FOOT, WALL_RISE } from "./scenes.js";
 
 const FLUSH_MS = 2000;
-const CHECK_N = 30;               // 매크로 검사에 쓰는 최근 누름 수
-const FREE_DAILY = 200;           // 하루 무료 탭 (sql tap_free_daily 와 같게. 막대 그림에만 쓴다 — 실제 수는 서버 값)
+const FREE_DAILY = 1000;           // 하루 무료 탭 (sql tap_free_daily 와 같게. 막대 그림에만 쓴다 — 실제 수는 서버 값)
 
 let ready = false;    // 서버에서 오늘 상태를 받기 전에는 누르지 않는다
 let taps = 0;         // 오늘 누른 횟수 (보내지 않은 것 포함)
@@ -166,31 +163,15 @@ function pauseUntil(iso) {
   ready = false;
   log.length = 0;
   const mins = Math.ceil(ms / 60000);
-  tick(`기계처럼 너무 일정하게 눌린 것 같아요. ${mins}분 동안 쉬었다가 다시 눌러 주세요. (하루에 여러 번 반복되면 계정이 잠겨요)`, "bad");
+  tick(`프로그램이 누른 것 같은 입력이 감지됐어요. ${mins}분 동안 쉬었다가 다시 눌러 주세요. (하루에 여러 번 반복되면 계정이 잠겨요)`, "bad");
   clearTimeout(pauseTimer);
   pauseTimer = setTimeout(() => { ready = true; tick("다시 누를 수 있어요."); }, ms + 500);
 }
 
 /* ---------- 매크로 검사 ---------- */
-const log = [];           // 최근 누름 {t, x, y}
+const log = [];           // (예전 간격 검사용. 쉬기 시작할 때 비운다)
 function suspicious(e) {
-  if (!e.isTrusted) return { reason: "synthetic" };
-  log.push({ t: e.timeStamp, x: Math.round(e.clientX), y: Math.round(e.clientY) });
-  if (log.length > CHECK_N) log.shift();
-  if (log.length < CHECK_N) return null;
-
-  const gaps = [];
-  for (let i = 1; i < log.length; i++) gaps.push(log[i].t - log[i - 1].t);
-  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
-  const sd = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) ** 2, 0) / gaps.length);
-  const cv = sd / mean;
-  const span = log[log.length - 1].t - log[0].t;
-  const sameSpot = log.every(p => Math.abs(p.x - log[0].x) <= 3 && Math.abs(p.y - log[0].y) <= 3);
-  const perSec = (CHECK_N - 1) / (span / 1000);
-  const detail = { n: CHECK_N, mean_ms: Math.round(mean), cv: Math.round(cv * 1000) / 1000, per_sec: Math.round(perSec * 10) / 10, same_spot: sameSpot };
-
-  if (mean < 250 && cv < 0.06) return { reason: "regular-interval", ...detail };
-  if (sameSpot && perSec > 14) return { reason: "same-spot-fast", ...detail };
+  if (!e.isTrusted) return { reason: "synthetic" };    // 스크립트가 만든 누름만
   return null;
 }
 
@@ -242,7 +223,7 @@ document.addEventListener("visibilitychange", () => {
   else if (ready) load();                         // 돌아오면(자정을 넘겼을 수도) 서버 값으로 다시
 });
 /* 자정이 지나면 누른 횟수·무료 탭을 서버 값으로 다시. 켜 둔 채 밤을 넘긴 화면도 */
-window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 무료 탭 200번이 다시 채워졌어요."); } });
+window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 무료 탭 1,000번이 다시 채워졌어요."); } });
 window.addEventListener("pagehide", flushOnLeave);
 
 db.auth.onAuthStateChange((_e, session) => { token = session?.access_token ?? ""; });

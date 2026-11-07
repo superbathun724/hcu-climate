@@ -32,8 +32,8 @@ eq("1단계 뜻 1코인", COINS[coinLevel(0, "meaning")], 1);
 eq("빈 답은 오답", check(rich, "spelling", "  "), false);
 eq("철자 정답", check(rich, "spelling", "Modest"), true);
 
-eq("에너지 = 코인 × 5", ENERGY, [5, 10, 15, 20, 25, 40]);
-eq("대신 낸 철자 문제 에너지 10", ENERGY[coinLevel(5, "spelling")], 10);
+eq("에너지 = 코인 × 100", ENERGY, [100, 200, 300, 400, 500, 800]);
+eq("대신 낸 철자 문제 에너지 200", ENERGY[coinLevel(5, "spelling")], 200);
 
 /* ---- 재난 사례: 8곳 모두 문장 두 줄과 https 출처 ---- */
 eq("사례 8곳", Object.keys(CASES).map(Number), [1, 2, 3, 4, 5, 6, 7, 8]);

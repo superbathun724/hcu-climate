@@ -5,7 +5,7 @@
 --
 -- 규칙 (복습 날짜를 기다리지 않는다. 고른 단어장을 언제든, 고른 단계로 공부한다)
 --   p_level = 이번 문제의 단계(학생이 고른 단계, "내 단계대로"면 그 단어의 지금 단계)
---   - 맞히면: 단계만큼 코인 (1·2·3·4·5·8) + 탭 에너지 (코인의 5배: 5·10·15·20·25·40)
+--   - 맞히면: 단계만큼 코인 (1·2·3·4·5·8) + 탭 에너지 (코인의 100배: 100·200·300·400·500·800)
 --       p_level ≥ 지금 단계(도전) → p_level 의 다음 단계로 오른다(건너뛸 수 있다)
 --       p_level < 지금 단계(복습) → 단계 그대로
 --   - 틀리면: 복습(p_level ≤ 지금 단계)이면 한 단계 내려가고, 도전(p_level > 지금 단계)이면 그대로
@@ -18,7 +18,8 @@
 --   1. 문제를 받은 지 1.5초 안에 들어온 정답은 코인을 주지 않는다. 단계·날짜도 그대로 두어
 --      다시 풀면 코인을 받을 수 있다. (화면이 문제를 낼 때 issue_question 으로 시각을 남긴다)
 --   2. 1분에 코인을 받는 정답은 20개까지. 넘으면 1번과 같이 채점만 하고 그대로 둔다.
---   3. 최근 20번의 답 간격이 기계처럼 일정하면(평균 12초 미만, 흔들림 8% 미만) 계정을 잠근다.
+--   3. 최근 30번의 답 간격이 기계처럼 일정하면(평균 8초 미만, 흔들림 3% 미만) 계정을 잠근다.
+--      사람은 문제마다 생각하는 시간이 달라 여기에 닿지 않는다.
 --      탭 매크로와 같이 관리자가 푼다.
 --
 -- 채점은 브라우저가 하지 않는다. functions/api/answer.js(Cloudflare)가 채점하고,
@@ -68,9 +69,9 @@ returns integer language sql immutable as $$
 $$;
 
 -- 단계별 에너지: 맞히면 코인과 함께 탭 에너지도 생긴다(에너지 1 = 탭 1번 = 1코인, 03_game.sql)
--- 코인의 5배. 1단계 5 · 2단계 10 · 3단계 15 · 4단계 20 · 5단계 25 · 6단계 40  (js/quiz-core.js ENERGY 와 같게)
+-- 코인의 100배. 1단계 100 · 2단계 200 · 3단계 300 · 4단계 400 · 5단계 500 · 6단계 800  (js/quiz-core.js ENERGY 와 같게)
 create or replace function public.word_energy(p_level integer)
-returns integer language sql immutable as $$ select 5 * public.word_coins(p_level) $$;
+returns integer language sql immutable as $$ select 100 * public.word_coins(p_level) $$;
 
 -- 예전 3칸짜리(단계 없이) 함수는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
 -- 예전 함수(칸 수가 다른 것)는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
@@ -133,9 +134,9 @@ begin
   insert into public.answer_log (user_id, paid) values (p_user, v_pays and v_throttle is null);
   select count(*), avg(gap), stddev_pop(gap) into v_n, v_mean, v_sd from (
     select extract(epoch from at - lag(at) over (order by at)) as gap
-      from (select at from public.answer_log where user_id = p_user order by at desc limit 21) t
+      from (select at from public.answer_log where user_id = p_user order by at desc limit 31) t
   ) g where gap is not null;
-  if v_n >= 20 and v_mean < 12 and v_sd / nullif(v_mean, 0) < 0.08 then
+  if v_n >= 30 and v_mean < 8 and v_sd / nullif(v_mean, 0) < 0.03 then
     perform public.lock_player(p_user, 'quiz-pattern',
       jsonb_build_object('mean_s', round(v_mean, 2), 'cv', round(v_sd / v_mean, 3), 'n', v_n));
     select balance into v_balance from public.players where user_id = p_user;

@@ -91,6 +91,7 @@ section.on{display:block}
 .band b{font-size:.95rem}
 .band .now{outline:2px solid var(--coin)}
 .band.energy{grid-template-columns:repeat(3,minmax(0,1fr))}
+.band.energy small{display:block;font-size:.72rem;color:#b07a00;font-weight:600}
 .case{margin-top:8px;padding:8px 10px;border-radius:10px;background:#fff6f4;font-size:.8rem;line-height:1.5;color:#4a3a36}
 .case b{color:#a8382a;margin-right:4px}
 .case .src{margin-top:4px;font-size:.72rem;color:var(--sub)}

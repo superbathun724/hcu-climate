@@ -127,7 +127,7 @@ revoke all on public.players, public.sends, public.disasters, public.flags from 
 -- 탭: 한 번에 1코인, 줄지 않는다. 대신 누를 수 있는 횟수가 정해져 있다.
 --   하루 무료 tap_free_daily() 번 + 단어를 맞혀 모은 에너지 1 = 탭 1번 (에너지는 날이 바뀌어도 남는다)
 --   단어 정답 하나의 에너지 = word_energy(단계) (04_study.sql). 1단계 5 … 6단계 40
-create or replace function public.tap_free_daily() returns integer language sql immutable as $$ select 200 $$;
+create or replace function public.tap_free_daily() returns integer language sql immutable as $$ select 1000 $$;
 alter table public.players add column if not exists energy integer not null default 0 check (energy >= 0);
 -- 예전 "구간마다 절반" 규칙의 함수. 다른 곳에서 부르지 않게 지운다.
 drop function if exists public.tap_coins(integer, integer);
@@ -329,7 +329,7 @@ $$;
 
 -- 탭 올리기. 브라우저는 2초쯤마다 모아서 "n번 눌렀다"를 보낸다.
 -- p_flag: 화면이 누르는 패턴이 매크로 같다고 본 경우 그 근거.
---         화면 검사는 사람도 가끔 걸릴 수 있어서 바로 잠그지 않는다. 5분 동안 탭 코인을 멈추고(tap_pause_min),
+--         (지금 화면은 스크립트가 만든 가짜 누름일 때만 보낸다) 바로 잠그지 않고 5분 동안 탭을 멈추고(tap_pause_min),
 --         24시간 안에 3번째로 오면 그때 잠근다(tap_flags_to_lock).
 -- 서버는 지난번 이후 흐른 시간으로 n 을 한 번 더 자르고, 사람 속도보다 훨씬 많이 보내는 일이
 -- 1분 안에 3번 생기면 잠근다. 받아 주는 횟수는 오늘 남은 무료 탭 + 에너지까지.
