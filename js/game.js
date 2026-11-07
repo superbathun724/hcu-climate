@@ -17,7 +17,7 @@
 import { db, SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 import { $, setBalance, getBalance, onProfile, tick, num1, shieldText } from "./ui.js";
 import { currentEvent, liveShield } from "./event.js";
-import { SCENES, wallSVG, WALL_FOOT, WALL_RISE } from "./scenes.js";
+import { SCENES, wallSVG, WALL_FOOT, WALL_RISE, infraSVG } from "./scenes.js";
 
 const FLUSH_MS = 2000;
 const FREE_DAILY = 1000;           // 하루 무료 탭 (sql tap_free_daily 와 같게. 막대 그림에만 쓴다 — 실제 수는 서버 값)
@@ -66,12 +66,27 @@ function drawScene() {
   const sc = SCENES[region?.id];
   if (!sc) return;
   $("scene").style.background = `linear-gradient(${sc.sky[0]}, ${sc.sky[1]} 68%, ${sc.water} 68%)`;
-  $("sceneSvg").innerHTML = sc.art() + wallSVG(sc.wall);
+  $("sceneSvg").innerHTML = sc.art() + wallSVG(sc.wall) + `<g id="infraG"></g>`;
+  drawInfra();
   const cap = document.getElementById("wallCap");
   if (cap) cap.dataset.base = cap.getAttribute("fill");
   $("hazard").className = sc.hazard;
   drawShield();
 }
+
+/* 지은 시설을 풍경에 (조기경보 철탑·대피소·테트라포드) */
+let infraLv = {};
+function drawInfra() {
+  const g = document.getElementById("infraG");
+  if (g) g.innerHTML = infraSVG(infraLv);
+}
+async function loadInfraLv() {
+  if (!region) return;
+  const { data } = await db.from("region_infra").select("key, level").eq("region_id", region.id);
+  infraLv = Object.fromEntries((data ?? []).map(x => [x.key, x.level]));
+  drawInfra();
+}
+window.addEventListener("hcu:infra", loadInfraLv);
 
 async function loadRegion(classId) {
   const { data: cls } = await db.from("classes").select("region_id").eq("id", classId).maybeSingle();
@@ -92,6 +107,7 @@ async function loadRegion(classId) {
   const changed = region?.id !== r.id;
   region = r;
   changed ? drawScene() : drawShield();
+  loadInfraLv();
 }
 
 async function load(retry = 1) {

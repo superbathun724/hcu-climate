@@ -61,7 +61,7 @@ async function load() {
     <small>우리 ${me.className === "교사" ? "팀" : "반"}이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
     <div class="big">대비율 ${shieldText(sh)}</div>
     <div class="bar"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
-    <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 ${me.className === "교사" ? "팀" : "반"} 기여 ${Number(mine?.sent_today ?? 0).toLocaleString()}${Number(mine?.bonus) ? ` · 이번 기간 방어 보너스 ${Number(mine.bonus).toLocaleString()}` : ""}</small>`;
+    <small>${sh >= 50 ? "재난을 버틸 수 있어요" : `50%까지 ${num1(50 - sh)}% 남았어요`} · 오늘 우리 ${me.className === "교사" ? "팀" : "반"} 기여 ${Number(mine?.sent_today ?? 0).toLocaleString()}${Number(mine?.bonus) ? ` · 이번 기간 보너스(방어·시설) ${Number(mine.bonus).toLocaleString()}` : ""}</small>`;
 
   const rows = kind === "class"
     ? cls.data.map(r => ({ id: r.class_id, t: r.region_name ? `${r.class_name} · ${r.region_name}` : r.class_name, m: r.members, sent: r.sent, bonus: Number(r.bonus) || 0, v: r.per_capita, me: r.class_id === me.classId }))
@@ -72,7 +72,7 @@ async function load() {
   $("rankList").innerHTML = rows.map((r, i) => {
     if (r.v !== prev) { rank = i + 1; prev = r.v; }
     return `<div class="rk${r.me ? " me" : ""}"><span class="n">${r.v == null ? "–" : rank}</span>
-      <div class="m"><div class="t">${esc(r.t)}</div><div class="d">가입 ${r.m}명 · 이번 기간 기여 ${Number(r.sent).toLocaleString()}${r.bonus ? ` · 방어 보너스 ${r.bonus.toLocaleString()}` : ""}</div></div>
+      <div class="m"><div class="t">${esc(r.t)}</div><div class="d">가입 ${r.m}명 · 이번 기간 기여 ${Number(r.sent).toLocaleString()}${r.bonus ? ` · 보너스(방어·시설) ${r.bonus.toLocaleString()}` : ""}</div></div>
       <span class="v">${r.v == null ? "–" : num1(r.v)}</span></div>`;
   }).join("") || `<p class="note">아직 기록이 없어요.</p>`;
 }

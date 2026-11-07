@@ -260,7 +260,7 @@ begin
     returning * into d;
     if d.result = 'held' then
       insert into public.rank_bonus (class_id, disaster_id, points)
-      select c.id, d.id, public.defense_bonus_pc() *
+      select c.id, d.id, public.region_defense_bonus_pc(d.region_id) *            -- 대피소만큼 더
              (select count(*) from public.profiles p join auth.users u on u.id = p.user_id
                where p.class_id = c.id and u.email_confirmed_at is not null)
         from public.classes c where c.region_id = d.region_id
@@ -270,7 +270,7 @@ begin
 
   if not exists (select 1 from public.disasters where starts_at > now() - public.disaster_every()) then
     insert into public.disasters (region_id, starts_at, ends_at, drain)
-    select r.id, now(), now() + public.disaster_length(), public.disaster_drain()
+    select r.id, now(), now() + public.disaster_length(), public.region_drain(r.id)   -- 조기경보 시설만큼 덜 깎는다
       from public.regions r
      where r.id is distinct from (select region_id from public.disasters order by starts_at desc limit 1)
      order by random() limit 1;
@@ -289,7 +289,7 @@ begin
   select max(starts_at) + public.disaster_every() into v_next from public.disasters;
   -- 가장 최근에 결과가 난 재난 (화면이 "방어 성공/실패"를 한 번 알린다)
   select jsonb_build_object('id', x.id, 'region_id', x.region_id, 'region_name', rr.name, 'result', x.result,
-                            'bonus_pc', public.defense_bonus_pc())
+                            'bonus_pc', public.region_defense_bonus_pc(x.region_id))
     into v_last
     from public.disasters x join public.regions rr on rr.id = x.region_id
    where x.result in ('held', 'fell') and x.ends_at > now() - interval '30 minutes'
@@ -413,8 +413,8 @@ end;
 $$;
 
 -- 코인 보내기. 울산(자기 쪽)에는 쓸 수 없다 — 받을 수 있는 곳은 regions 표의 바깥 지역뿐이다.
--- 재난 중인 지역이면 disaster_mult() 배(2배)로 들어간다. 100% 를 넘어도 shield_max()(150%)까지 쌓인다.
--- 상한까지 남은 만큼만 받고(나머지는 지갑에 그대로), 이미 가득이면 보내지 않는다.
+-- 재난 중인 지역이면 disaster_mult() 배(2배)로 들어간다. 대비율은 그 지역 상한(region_cap, 기본 150%)까지 오르고,
+-- 넘친 만큼은 그 지역 기금(regions.fund)이 되어 시설을 짓는 데 쓰인다(06_infra.sql). 보낸 코인은 모두 순위에 들어간다.
 create or replace function public.send_coins(p_region smallint, p_amount integer)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -423,7 +423,7 @@ declare
   v_bal numeric;
   v_mult smallint := 1;
   v_shield numeric;
-  v_room integer; v_amount integer;
+  v_cap numeric; v_eff numeric; v_toshield numeric; v_tofund numeric; v_fund numeric; v_built jsonb;
 begin
   if v_uid is null then raise exception '로그인이 필요해요.' using errcode = '42501'; end if;
   perform public.assert_unlocked(v_uid);
@@ -447,28 +447,31 @@ begin
     v_mult := public.disaster_mult();
   end if;
 
-  -- 상한까지 남은 자리만큼만 보낸다
+  -- 대비율을 상한까지 채우고, 넘친 코인(배수 포함)은 기금으로
   select shield into v_shield from public.regions where id = p_region for update;
-  v_room := ceil((public.shield_max() - v_shield) * public.coins_per_pct() / v_mult)::integer;
-  if v_room < 1 then
-    raise exception '이미 대비율이 가득(%)이에요. 재난이 오거나 다른 지역을 도와주세요.', public.shield_max() || '%' using errcode = 'P0001';
-  end if;
-  v_amount := least(p_amount, v_room);
+  v_cap := public.region_cap(p_region);
+  v_eff := p_amount * v_mult;                                                   -- 배수까지 친 효과
+  v_toshield := least(v_eff, greatest(0, (v_cap - v_shield) * public.coins_per_pct()));
+  v_tofund := v_eff - v_toshield;
 
-  update public.players set balance = balance - v_amount, sent = sent + v_amount where user_id = v_uid;
+  update public.players set balance = balance - p_amount, sent = sent + p_amount where user_id = v_uid;
 
   update public.regions
-     set shield = least(public.shield_max(), shield + (v_amount * v_mult)::numeric / public.coins_per_pct()),
+     set shield = least(v_cap, shield + v_toshield / public.coins_per_pct()),
+         fund = fund + v_tofund,
          updated_at = now()
    where id = p_region
-  returning shield into v_shield;
+  returning shield, fund into v_shield, v_fund;
 
   insert into public.sends (user_id, class_id, club_id, region_id, amount, mult)
-  values (v_uid, v_prof.class_id, v_prof.club_id, p_region, v_amount, v_mult);
+  values (v_uid, v_prof.class_id, v_prof.club_id, p_region, p_amount, v_mult);
+
+  v_built := case when v_tofund > 0 then public.try_build(p_region) else '[]'::jsonb end;
 
   return jsonb_build_object(
     'balance', (select balance from public.players where user_id = v_uid),
-    'region', p_region, 'shield', v_shield, 'mult', v_mult, 'amount', v_amount);
+    'region', p_region, 'shield', v_shield, 'cap', v_cap, 'mult', v_mult, 'amount', p_amount,
+    'to_fund', v_tofund, 'fund', (select fund from public.regions where id = p_region), 'built', v_built);
 end;
 $$;
 

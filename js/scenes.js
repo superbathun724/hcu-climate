@@ -381,3 +381,52 @@ export function wallSVG(kind) {
     <rect id="wallCap" x="-100" y="${WALL_FOOT - 9}" width="620" height="3" fill="${cap}"/>
   </g>`;
 }
+
+/* ---------- 지은 시설 (06_infra.sql) ----------
+   풍경 위, 방벽 앞에 그린다. lv = { warning, wall, shelter } (0~5)
+     조기경보: 오른쪽 철탑. 단계마다 높아지고 사이렌이 늘어난다
+     대피소:   튼튼한 2~4층 건물. 단계마다 넓고 높아진다
+     방파제:   방벽 발치의 테트라포드(소파블록). 단계마다 늘어난다 */
+export function infraSVG(lv = {}) {
+  const w = lv.warning | 0, s = lv.shelter | 0, wl = lv.wall | 0;
+  let out = "";
+  if (s > 0) {
+    const bw = 22 + 5 * s, floors = 1 + Math.ceil(s / 2), fh = 9, x = 352 - bw / 2, base = 207, top = base - floors * fh;
+    let win = "";
+    for (let f = 0; f < floors; f++) for (let i = 0; i < Math.floor(bw / 8); i++)
+      win += `<rect x="${x + 4 + i * 8}" y="${top + 3 + f * fh}" width="4" height="4" fill="#9cc6e0"/>`;
+    out += `<g class="fac-shelter">
+      <ellipse cx="${x + bw / 2 + 4}" cy="${base + 1}" rx="${bw / 2 + 6}" ry="2.4" fill="#000" opacity=".15"/>
+      <rect x="${x}" y="${top}" width="${bw}" height="${floors * fh}" fill="#ECEFF1"/>
+      <rect x="${x + bw * .65}" y="${top}" width="${bw * .35}" height="${floors * fh}" fill="#000" opacity=".1"/>
+      <rect x="${x - 2}" y="${top - 3}" width="${bw + 4}" height="3.5" fill="#2E7D4F"/>
+      ${win}
+      <rect x="${x + bw / 2 - 3}" y="${base - 7}" width="6" height="7" fill="#37474F"/>
+      <rect x="${x + bw / 2 - 7}" y="${top - 10}" width="14" height="6" rx="1.5" fill="#2E7D4F"/>
+      <path d="M${x + bw / 2 - 3} ${top - 5.5} l3 -3 l3 3" fill="none" stroke="#fff" stroke-width="1.2"/>
+    </g>`;
+  }
+  if (w > 0) {
+    const x = 400, base = 210, h = 34 + 7 * w, top = base - h;
+    let lattice = "";
+    for (let y = base; y > top + 6; y -= 7) lattice += `M${x - 4} ${y} L${x + 4} ${y - 7} M${x + 4} ${y} L${x - 4} ${y - 7}`;
+    let sirens = "";
+    for (let i = 0; i < Math.min(w, 3); i++) sirens += `<path d="M${x + 3} ${top + 6 + i * 7} l7 -3 v8 z" fill="#F2B530"/><path d="M${x - 3} ${top + 6 + i * 7} l-7 -3 v8 z" fill="#F2B530"/>`;
+    out += `<g class="fac-warning">
+      <path d="M${x - 5} ${base} L${x - 1.5} ${top} M${x + 5} ${base} L${x + 1.5} ${top}" stroke="#5b6770" stroke-width="1.6" fill="none"/>
+      <path d="${lattice}" stroke="#7d8a93" stroke-width=".7" fill="none"/>
+      ${sirens}
+      <circle class="blink" cx="${x}" cy="${top - 2}" r="2.4" fill="#ff5a4a"/>
+      ${w >= 4 ? `<rect x="${x - 9}" y="${top + 26}" width="18" height="2" fill="#5b6770"/><rect x="${x - 10}" y="${top + 20}" width="8" height="6" fill="#1d2b36"/><rect x="${x + 2}" y="${top + 20}" width="8" height="6" fill="#1d2b36"/>` : ""}
+    </g>`;
+  }
+  if (wl > 0) {
+    let pods = "";
+    for (let i = 0; i < wl * 3; i++) {
+      const cx = 14 + i * 13 + (i % 2) * 4, cy = WALL_FOOT - 2 - (i % 3) * 2;
+      pods += `<g transform="translate(${cx} ${cy}) rotate(${(i * 41) % 120})"><path d="M0 0 L0 -6 M0 0 L5.2 3 M0 0 L-5.2 3" stroke="#7f8b92" stroke-width="3.6" stroke-linecap="round"/><path d="M0 0 L0 -5 M0 0 L4.3 2.5" stroke="#b3bec4" stroke-width="1.6" stroke-linecap="round"/></g>`;
+    }
+    out += `<g class="fac-wall">${pods}</g>`;
+  }
+  return out;
+}

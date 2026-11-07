@@ -5,22 +5,25 @@
    울산은 목록에 없다. 코인을 받을 수 있는 곳은 regions 표의 바깥 7곳뿐이다.
    순서: 재난 중인 지역(빨강, 맨 위) → 우리 반이 맡은 곳 → 나머지 반 번호 순.
    재난 중에는 보낸 코인이 2배로 들어가고, 그 지역 대비율이 재난 대응에 조금씩 쓰인다.
-   대비율은 100% 를 넘어 150% 까지 쌓인다(비축). 막대는 100% 에서 멈추고 글자로 비축분을 보여 준다.
+   대비율은 100% 를 넘어 지역 상한(기본 150%, 방파제를 지으면 더)까지 쌓인다. 막대는 100% 에서 멈추고 글자로 보여 준다.
+   상한을 넘친 코인은 그 지역 기금이 되어 시설을 짓는다(js/infra.js, sql/06_infra.sql).
    재난 카드에는 그 지역의 실제 재난 사례와 효과가 있었던 대비를 출처와 함께 보여 준다(js/cases.js).
    ========================================================== */
 import { db } from "./config.js";
 import { $, esc, setBalance, getBalance, tick, onProfile, serverMsg, num1, shieldText } from "./ui.js";
 import { currentEvent, leftMs, liveShield, liveDrained, mmss } from "./event.js";
 import { CASES } from "./cases.js";
-
-const MAX = 150;          // 비축 상한 (sql shield_max 와 같게)
+import { announce } from "./infra.js";
 
 let regions = [];     // [{id, name, hazard, shield, cls}]
 let myClass = 0;
 
 const SAFE = 50;
-const shieldLine = v => `대비율 ${shieldText(v)} · ` +
-  (v >= MAX ? "가득 찼어요(최대 150%)" : v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
+const shieldLine = (v, cap = 150) => `대비율 ${shieldText(v)} · ` +
+  (v >= cap ? `가득(${num1(cap)}%) · 더 보내면 기금이 돼요` : v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
+const capOf = id => regions.find(x => x.id === id)?.cap ?? 150;
+const miniInfra = r => r.infra
+  ? `<div class="d infra-mini">시설 · 조기경보 ${r.infra.warning}단계 · 방파제 ${r.infra.wall}단계 · 대피소 ${r.infra.shelter}단계 · 기금 ${Math.floor(r.infra.fund).toLocaleString()}</div>` : "";
 
 /* 실제 사례 (재난 중인 카드에만) */
 function caseBox(id) {
@@ -40,8 +43,9 @@ function card(r, ev) {
     <div class="rtop"><div class="t">${esc(r.name)}</div><div class="tags">${tags}</div></div>
     <div class="d">${esc(r.hazard)}</div>
     <div class="shield"><div class="bar${sh > 100 ? " over" : ""}"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
-      <div class="d sv">${shieldLine(sh)}</div>
+      <div class="d sv">${shieldLine(sh, r.cap)}</div>
       ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요 · <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}% · 끝날 때 50% 이상이면 방어 성공</div>` : ""}</div>
+    ${miniInfra(r)}
     ${hit ? caseBox(r.id) : ""}
     <div class="give"><button class="btn coin" data-amt="10">10</button><button class="btn coin" data-amt="50">50</button><button class="btn coin" data-amt="100">100</button></div>
     <div class="give own"><input type="number" inputmode="numeric" min="1" step="1" placeholder="직접 입력"><button class="btn" data-amt="own">보내기</button></div>
@@ -60,15 +64,19 @@ function render() {
 }
 
 export async function loadRegions() {
-  const [rg, cl] = await Promise.all([
+  const [rg, cl, inf] = await Promise.all([
     db.from("regions").select("id, name, hazard, shield"),
     db.from("classes").select("id, region_id, name"),
+    db.rpc("infra_all"),
   ]);
+  const infOf = new Map((inf.data ?? []).map(x => [x.region_id, { ...x, fund: Number(x.fund) }]));
   if (rg.error || cl.error) { $("sendList").innerHTML = `<p class="note">지역을 불러오지 못했어요.</p>`; return; }
   const clsOf = new Map(cl.data.filter(c => c.region_id).map(c => [c.region_id, c]));
   regions = rg.data.map(r => {
     const c = clsOf.get(r.id);
-    return { ...r, shield: Number(r.shield), cls: c?.id ?? 0, clsName: c ? (c.name ?? `${c.id}반`) : "", team: !!c?.name };
+    const f = infOf.get(r.id);
+    return { ...r, shield: Number(r.shield), cls: c?.id ?? 0, clsName: c ? (c.name ?? `${c.id}반`) : "", team: !!c?.name,
+             cap: f ? Number(f.cap) : 150, infra: f ?? null };
   });
   render();
 }
@@ -80,7 +88,7 @@ window.addEventListener("hcu:second", e => {
   const sh = liveShield(ev);
   el.querySelector(".cd").textContent = mmss(leftMs(ev));
   el.querySelector(".bar i").style.width = Math.min(100, sh) + "%";
-  el.querySelector(".sv").textContent = shieldLine(sh);
+  el.querySelector(".sv").textContent = shieldLine(sh, capOf(ev.region_id));
   el.querySelector(".dr").textContent = "−" + num1(liveDrained(ev));
 });
 /* 15초마다 재난 정보가 오면: 재난이 시작·끝났을 때만 목록 순서를 다시 짜고,
@@ -97,7 +105,7 @@ window.addEventListener("hcu:event", async e => {
     const el = document.querySelector(`#sendList .row[data-r="${r.id}"]`); if (!el) continue;
     el.querySelector(".bar i").style.width = Math.min(100, r.shield) + "%";
     el.querySelector(".bar").classList.toggle("over", r.shield > 100);
-    el.querySelector(".sv").textContent = shieldLine(r.shield);
+    el.querySelector(".sv").textContent = shieldLine(r.shield, r.cap);
   }
 });
 
@@ -126,16 +134,20 @@ $("sendList").addEventListener("click", async e => {
   if (ev && ev.region_id === r.id) { ev.shield = r.shield; ev.drained = liveDrained(ev); }   // 다음 1초 계산이 새 값에서 이어지게
   el.querySelector(".bar i").style.width = Math.min(100, r.shield) + "%";
   el.querySelector(".bar").classList.toggle("over", r.shield > 100);
-  el.querySelector(".sv").textContent = shieldLine(r.shield);
+  el.querySelector(".sv").textContent = shieldLine(r.shield, r.cap);
+  if (r.infra) { r.infra.fund = Number(data.fund); const mini = el.querySelector(".infra-mini"); if (mini) mini.outerHTML = miniInfra(r); }
   inp.value = "";
   setBalance(data.balance);
-  const sentAmt = data.amount ?? amt;
-  const part = sentAmt < amt ? ` (150%까지 남은 자리만큼 ${sentAmt}코인만 보냈어요)` : "";
+  const toFund = Math.floor(Number(data.to_fund) || 0);
+  const toShield = amt * data.mult - toFund;
+  const fundTxt = toFund ? ` · 기금 +${toFund.toLocaleString()}` : "";
   tick(data.mult > 1
-    ? `${r.name}에 ${sentAmt}코인 → 재난 중이라 ${data.mult}배! 대비율 +${num1(sentAmt * data.mult / 20)}%${part}`
-    : `${r.name}에 ${sentAmt}코인을 보냈어요. 대비율 +${num1(sentAmt / 20)}%${part}`, "good");
+    ? `${r.name}에 ${amt}코인 → 재난 중이라 ${data.mult}배! 대비율 +${num1(toShield / 20)}%${fundTxt}`
+    : `${r.name}에 ${amt}코인을 보냈어요. 대비율 +${num1(toShield / 20)}%${fundTxt}`, "good");
+  announce(data.built);
   window.dispatchEvent(new Event("hcu:sent"));
 });
 
 onProfile(p => { myClass = p.classId; loadRegions(); });
+window.addEventListener("hcu:infra", () => loadRegions());          // 시설을 지으면 상한·단계가 바뀐다
 window.addEventListener("hcu:tab", e => { if (e.detail === "send") loadRegions(); });   // 다른 학생이 보낸 것까지 새로

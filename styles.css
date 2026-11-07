@@ -43,6 +43,7 @@ nav button{flex:1;border:0;background:transparent;padding:8px 2px;border-radius:
 nav button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 nav button.alert::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alert);margin-left:4px;vertical-align:middle;animation:blip 1.1s infinite}
 @keyframes blip{50%{opacity:.2}}
+#sceneSvg .blink{animation:blip 1.2s infinite}
 #ticker{margin:9px var(--gut) 0;font-size:.8rem;color:#3c4d5a;line-height:1.35;min-height:1.1em}
 #ticker.bad{color:#9b2c1f;font-weight:600}
 #ticker.good{color:#1B5A2A;font-weight:600}
@@ -91,6 +92,18 @@ section.on{display:block}
 .band b{font-size:.95rem}
 .band .now{outline:2px solid var(--coin)}
 .band.energy{grid-template-columns:repeat(3,minmax(0,1fr))}
+.row.infra{margin-bottom:10px}
+.facs{display:grid;gap:8px;margin-top:8px}
+.fac{background:#f6f9fc;border-radius:12px;padding:10px;border:2px solid transparent}
+.fac.voted{border-color:var(--blue,#0F4C9C)}
+.fac .fh{display:flex;align-items:center;gap:6px}
+.fac .fi{font-size:1.05rem}
+.fac .fh b{flex:1;min-width:0}
+.fac .flv{margin-left:auto;font-size:.75rem;color:var(--sub);white-space:nowrap}
+.fac .bar{margin:6px 0 2px}
+.fac .btn{margin-top:6px;width:100%}
+.infra-mini{margin-top:4px}
+@media (min-width:720px){.facs{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .band.energy small{display:block;font-size:.72rem;color:#b07a00;font-weight:600}
 .case{margin-top:8px;padding:8px 10px;border-radius:10px;background:#fff6f4;font-size:.8rem;line-height:1.5;color:#4a3a36}
 .case b{color:#a8382a;margin-right:4px}
