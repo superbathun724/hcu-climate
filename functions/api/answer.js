@@ -19,7 +19,7 @@
      SUPABASE_URL          https://ktsxgtnontktkrxdkfbw.supabase.co
      SUPABASE_SERVICE_KEY  sb_secret_… (Secret 으로 넣는다. 저장소·채팅에 절대 넣지 않는다)
    ========================================================== */
-import { typesForLevel, check, answerText } from "../../js/quiz-core.js";
+import { typesForLevel, check, answerText, coinLevel } from "../../js/quiz-core.js";
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
@@ -82,12 +82,13 @@ export async function onRequestPost({ request, env }) {
   }
 
   try {
-    // 숨긴 단어장의 단어는 공부할 수 없다
-    const [w] = await rest(env,
-      `words?id=eq.${wordId}&select=id,word,senses,synonyms,antonyms,phrases,sentences,word_sets!inner(hidden,deleted_at)&word_sets.hidden=eq.false&word_sets.deleted_at=is.null`);
+    // 숨긴 단어장의 단어는 공부할 수 없다. 단어와 진도는 서로 기다릴 필요가 없어 한꺼번에 묻는다(시드니 왕복을 한 번 줄임).
+    const [[w], [pr]] = await Promise.all([
+      rest(env, `words?id=eq.${wordId}&select=id,word,senses,synonyms,antonyms,phrases,sentences,word_sets!inner(hidden,deleted_at)&word_sets.hidden=eq.false&word_sets.deleted_at=is.null`),
+      rest(env, `progress?user_id=eq.${userId}&word_id=eq.${wordId}&select=srs_level`),
+    ]);
     if (!w) return json({ error: "단어를 찾을 수 없어요." }, 404);
 
-    const [pr] = await rest(env, `progress?user_id=eq.${userId}&word_id=eq.${wordId}&select=srs_level`);
     const level = pr?.srs_level ?? 0;
     const asked = chosen ?? level;            // 이번 문제의 단계
 
@@ -101,7 +102,7 @@ export async function onRequestPost({ request, env }) {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/record_answer`, {
       method: "POST",
       headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json" },
-      body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct, p_level: asked }),
+      body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct, p_level: asked, p_pay: coinLevel(asked, type) }),
     });
     const text = await res.text();
     if (!res.ok) {

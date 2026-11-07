@@ -115,7 +115,8 @@ begin
   delete from public.suggestion_votes where suggestion_id = p_id and user_id = v_uid;
   if found then v_on := false;
   else
-    insert into public.suggestion_votes (suggestion_id, user_id) values (p_id, v_uid);
+    insert into public.suggestion_votes (suggestion_id, user_id) values (p_id, v_uid)
+    on conflict do nothing;                               -- 빠르게 두 번 눌렀을 때
     v_on := true;
   end if;
   return jsonb_build_object('voted', v_on,

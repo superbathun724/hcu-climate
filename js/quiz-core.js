@@ -9,7 +9,9 @@
      3단계  유의어   단어 → 유의어 하나 (없으면 반의어, 둘 다 없으면 뜻)
      4단계  표현     빈칸 표현 + 해석 → 빈칸 단어 (없으면 철자)
      5단계  예문     빈칸 예문 + 해석 → 빈칸 단어 (없으면 철자)
-     6단계  종합     유의어·반의어·표현·예문 중 아무거나 (뜻·철자는 빼서 쉬운 문제로 8코인을 못 받게)
+     6단계  종합     유의어·반의어·표현·예문 중 아무거나
+   그 단계 유형을 낼 자료가 없는 단어는 쉬운 유형으로 대신 낸다(계속 공부할 수 있게).
+   이때 코인은 고른 단계가 아니라 **실제로 나온 유형**의 값이다(coinLevel). 6단계를 골라도 철자 문제면 2코인.
    스스로 채점하는 문제는 없다. 모두 자동 채점이라 코인을 줄 수 있다.
    ========================================================== */
 import { checkMeaning, checkSpelling, checkRelated, normEn, meaningAnswer, relatedAnswer } from "./grade.js";
@@ -62,6 +64,14 @@ export function available(w) {
 }
 
 const WANT = [["meaning"], ["spelling"], ["synonym", "antonym"], ["phrase"], ["sentence"], ["synonym", "antonym", "phrase", "sentence"]];
+const TYPE_LEVEL = { meaning: 0, spelling: 1, synonym: 2, antonym: 2, phrase: 3, sentence: 4 };
+
+/** 코인을 매기는 단계: 그 단계의 본래 유형이면 그 단계, 대신 낸 쉬운 유형이면 그 유형의 단계 */
+export function coinLevel(level, type) {
+  const lv = Math.max(0, Math.min(MAX_LEVEL, level | 0));
+  if (WANT[lv].includes(type)) return lv;
+  return Math.min(lv, TYPE_LEVEL[type] ?? 0);
+}
 const FALLBACK = [[], [], ["meaning"], ["spelling"], ["spelling"], ["spelling"]];
 
 /** 이 단계에서 낼 수 있는 유형들. 빈 배열이면 이 단어는 문제를 낼 수 없다. */

@@ -12,7 +12,8 @@
      - 간격이 기계처럼 일정함(평균 250ms 미만, 흔들림 6% 미만)
      - 같은 자리(3px 안)를 사람이 못 낼 속도(초당 14번 넘게)로 누름
      - 스크립트가 만든 가짜 누름(isTrusted=false)
-   이면 더 받지 않고 서버에 알린다(submit_taps 의 p_flag). 서버가 계정을 잠그고 관리자가 풀어 준다.
+   이면 더 받지 않고 서버에 알린다(submit_taps 의 p_flag). 사람도 리듬을 타다 가끔 걸릴 수 있어서 바로 잠그지 않고
+   5분 동안 탭을 쉬게 한다. 24시간 안에 3번째면 서버가 잠그고 관리자가 풀어 준다.
    이 검사는 화면 쪽이라 우회할 수 있다. 서버도 따로 "사람 속도보다 훨씬 많이"를 본다.
    ========================================================== */
 import { db, SUPABASE_URL, SUPABASE_KEY } from "./config.js";
@@ -119,6 +120,7 @@ async function load(retry = 1) {
   if (data.locked) return window.dispatchEvent(new Event("hcu:locked"));
   ready = true;
   draw();
+  if (data.paused_until) pauseUntil(data.paused_until);       // 쉬는 중에 새로고침해도 이어서
 }
 
 /* 모아 둔 탭을 보낸다. 다른 화면(지원·단어)은 코인을 쓰기 전에 이것을 먼저 부른다. */
@@ -143,6 +145,12 @@ async function flush() {
       window.dispatchEvent(new Event("hcu:locked"));
       return;
     }
+    if (data.paused_until) {
+      pending = 0; flag = null;
+      setBalance(data.balance); taps = data.taps_today; draw();
+      pauseUntil(data.paused_until);
+      return;
+    }
     // 서버 값 + 보내는 동안 더 누른 것
     taps = data.taps_today + pending;
     setBalance(Number(data.balance) + coinsFor(data.taps_today, pending));
@@ -153,6 +161,19 @@ async function flush() {
   inflight = null;
 }
 window.hcuFlushTaps = flush;
+
+/* 화면이 매크로 같다고 본 뒤 잠깐 쉬기. 시간이 지나면 저절로 다시 누를 수 있다. */
+let pauseTimer = null;
+function pauseUntil(iso) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!(ms > 0)) return;
+  ready = false;
+  log.length = 0;
+  const mins = Math.ceil(ms / 60000);
+  tick(`기계처럼 너무 일정하게 눌린 것 같아요. ${mins}분 동안 쉬었다가 다시 눌러 주세요. (하루에 여러 번 반복되면 계정이 잠겨요)`, "bad");
+  clearTimeout(pauseTimer);
+  pauseTimer = setTimeout(() => { ready = true; tick("다시 누를 수 있어요."); }, ms + 500);
+}
 
 /* ---------- 매크로 검사 ---------- */
 const log = [];           // 최근 누름 {t, x, y}

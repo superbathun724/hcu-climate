@@ -9,7 +9,9 @@
 --       p_level ≥ 지금 단계(도전) → p_level 의 다음 단계로 오른다(건너뛸 수 있다)
 --       p_level < 지금 단계(복습) → 단계 그대로
 --   - 틀리면: 복습(p_level ≤ 지금 단계)이면 1단계로, 도전(p_level > 지금 단계)이면 그대로
+--   - 코인은 고른 단계가 아니라 실제로 나온 문제 유형의 단계로 매긴다(p_pay).
 --   - 같은 단어는 하루(한국 날짜)에 한 번만 코인을 받고 단계가 바뀐다.
+--   - 그날 한 번 틀리거나 건너뛴 단어는(정답을 보여 주므로) 그날 다시 맞혀도 코인·단계가 그대로다.
 --     → 같은 단어를 반복해서 코인을 불리는 길을 막는다. 하루 한도는 없다.
 --
 -- 자동 풀이(봇) 대비 — 사람은 거의 걸리지 않고, 걸려도 손해가 없게
@@ -24,6 +26,8 @@
 -- ==========================================================
 
 alter table public.progress add column if not exists last_correct_day date;
+-- 오늘 틀린(건너뛴) 날. 같은 날 다시 맞혀도 코인을 주지 않는다(틀리면 정답을 보여 주므로).
+alter table public.progress add column if not exists last_wrong_day date;
 
 -- 문제를 낸 시각 (학생·단어마다 마지막 한 개만)
 create table if not exists public.quiz_issues (
@@ -64,9 +68,15 @@ returns integer language sql immutable as $$
 $$;
 
 -- 예전 3칸짜리(단계 없이) 함수는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
+-- 예전 함수(칸 수가 다른 것)는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
 drop function if exists public.record_answer(uuid, bigint, boolean);
+drop function if exists public.record_answer(uuid, bigint, boolean, smallint);
 
-create or replace function public.record_answer(p_user uuid, p_word bigint, p_correct boolean, p_level smallint)
+-- p_level: 고른 단계(단계 오르내림은 이것으로)
+-- p_pay  : 코인을 매기는 단계 = 실제로 나온 문제 유형의 단계 (js/quiz-core.js coinLevel).
+--          6단계를 골랐어도 자료가 없어 철자 문제가 나왔으면 2코인. 비우면 p_level 과 같다.
+create or replace function public.record_answer(p_user uuid, p_word bigint, p_correct boolean, p_level smallint,
+                                                p_pay smallint default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -79,7 +89,7 @@ declare
   v_balance numeric;
   v_issued timestamptz;
   v_throttle text;            -- null | 'fast' | 'busy'
-  v_pays boolean;             -- 이번 답이 코인을 받는 답인가 (정답 + 오늘 아직 안 받은 단어)
+  v_pays boolean;             -- 이번 답이 코인을 받는 답인가 (정답 + 오늘 아직 안 받았고 안 틀린 단어)
   v_n integer; v_mean numeric; v_sd numeric;
 begin
   if not exists (select 1 from public.words w join public.word_sets s on s.id = w.set_id
@@ -93,11 +103,15 @@ begin
   perform public.assert_unlocked(p_user);            -- 잠긴 계정은 단어 코인도 없음 (03_game.sql)
   perform public.ensure_player(p_user);
 
-  -- 1·2. 너무 빠른 정답, 1분 상한 (정답이고 오늘 아직 코인을 안 받은 단어에만 해당)
+  insert into public.progress (user_id, word_id) values (p_user, p_word) on conflict do nothing;
+  select * into pr from public.progress where user_id = p_user and word_id = p_word for update;
+  v_before := pr.srs_level;
+  v_lv := least(greatest(coalesce(p_level, pr.srs_level), 0), 5);
+
+  -- 1·2. 너무 빠른 정답, 1분 상한 (코인을 받을 답에만 해당)
   select issued_at into v_issued from public.quiz_issues where user_id = p_user and word_id = p_word;
   delete from public.quiz_issues where user_id = p_user and word_id = p_word;      -- 한 문제에 한 번
-  v_pays := p_correct and not exists (select 1 from public.progress
-                                        where user_id = p_user and word_id = p_word and last_correct_day = v_today);
+  v_pays := p_correct and pr.last_correct_day is distinct from v_today and pr.last_wrong_day is distinct from v_today;
   if v_pays then
     if v_issued is null or now() - v_issued < make_interval(secs => public.quiz_min_ms() / 1000.0) then
       v_throttle := 'fast';
@@ -121,24 +135,20 @@ begin
     return jsonb_build_object('locked', true, 'correct', p_correct, 'coins', 0, 'balance', v_balance);
   end if;
 
-  if v_throttle is not null then
+  if v_throttle is not null then              -- 채점만. 단계·날짜 그대로라 다시 풀면 받는다
     select balance into v_balance from public.players where user_id = p_user;
-    select srs_level into v_before from public.progress where user_id = p_user and word_id = p_word;
     return jsonb_build_object(
-      'correct', true, 'throttled', v_throttle, 'level_before', coalesce(v_before, 0), 'level', coalesce(v_before, 0),
-      'asked', least(greatest(coalesce(p_level, v_before, 0), 0), 5), 'coins', 0, 'already_today', false, 'balance', v_balance);
+      'correct', true, 'throttled', v_throttle, 'level_before', v_before, 'level', v_before,
+      'asked', v_lv, 'coins', 0, 'already_today', false, 'balance', v_balance);
   end if;
-
-  insert into public.progress (user_id, word_id) values (p_user, p_word) on conflict do nothing;
-  select * into pr from public.progress where user_id = p_user and word_id = p_word for update;
-  v_before := pr.srs_level;
-  v_lv := least(greatest(coalesce(p_level, pr.srs_level), 0), 5);
 
   if p_correct then
     if pr.last_correct_day = v_today then
       v_already := true;                                  -- 오늘 이미 받음: 코인·단계 그대로
+    elsif pr.last_wrong_day = v_today then
+      null;                                               -- 오늘 한 번 틀림(건너뛰기 포함): 정답을 본 뒤라 코인·단계 그대로
     else
-      v_coins := public.word_coins(v_lv);
+      v_coins := public.word_coins(least(v_lv, coalesce(p_pay, v_lv)));
       if v_lv >= pr.srs_level then
         pr.srs_level := least(v_lv + 1, 5);               -- 도전 성공: 고른 단계의 다음으로
       end if;
@@ -147,11 +157,13 @@ begin
   else
     if v_lv <= pr.srs_level then pr.srs_level := 0; end if;   -- 복습에서 틀림
     pr.wrong_count := pr.wrong_count + 1;
+    if pr.last_correct_day is distinct from v_today then pr.last_wrong_day := v_today; end if;
   end if;
 
   update public.progress set
     srs_level        = pr.srs_level,
     last_correct_day = pr.last_correct_day,
+    last_wrong_day   = pr.last_wrong_day,
     wrong_count      = pr.wrong_count,
     attempt_count    = attempt_count + 1,
     last_tested_at   = now()
@@ -164,7 +176,9 @@ begin
 
   return jsonb_build_object(
     'correct', p_correct, 'level_before', v_before, 'level', pr.srs_level, 'asked', v_lv,
-    'coins', v_coins, 'already_today', v_already, 'balance', v_balance);
+    'coins', v_coins, 'already_today', v_already,
+    'after_wrong', p_correct and not v_already and v_coins = 0,
+    'balance', v_balance);
 end;
 $$;
 
@@ -173,7 +187,7 @@ $$;
 grant select on public.words, public.word_sets, public.progress to service_role;
 
 -- 서버 함수(비밀 키 = service_role)만 부를 수 있다.
-revoke execute on function public.record_answer(uuid, bigint, boolean, smallint) from public, anon, authenticated;
-grant  execute on function public.record_answer(uuid, bigint, boolean, smallint) to service_role;
+revoke execute on function public.record_answer(uuid, bigint, boolean, smallint, smallint) from public, anon, authenticated;
+grant  execute on function public.record_answer(uuid, bigint, boolean, smallint, smallint) to service_role;
 revoke execute on function public.issue_question(bigint) from public, anon;
 grant  execute on function public.issue_question(bigint) to authenticated;

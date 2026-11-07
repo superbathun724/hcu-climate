@@ -11,7 +11,7 @@
    ========================================================== */
 import { db } from "./config.js";
 import { $, esc, setBalance, getBalance, coinPop, tick, kstToday } from "./ui.js";
-import { typesForLevel, question, COINS } from "./quiz-core.js";
+import { typesForLevel, question, COINS, coinLevel } from "./quiz-core.js";
 
 const COUNTS = [10, 20, 30, 0];          // 0 = 전체
 const TYPE_NAME = ["뜻", "철자", "유의어", "표현", "예문", "종합"];
@@ -28,6 +28,8 @@ let pickCount = 20;    // 0 = 전체
 
 const levelOf = w => w.progress?.[0]?.srs_level ?? 0;
 const doneToday = w => w.progress?.[0]?.last_correct_day === kstToday();
+const wrongToday = w => w.progress?.[0]?.last_wrong_day === kstToday();      // 오늘 한 번 틀린 단어: 코인은 내일
+const noCoinToday = w => doneToday(w) || wrongToday(w);
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -43,7 +45,7 @@ async function start(s) {
 
   // progress 는 RLS 때문에 내 것만 붙어 온다
   const { data, error } = await db.from("words")
-    .select("id, word, senses, synonyms, antonyms, phrases, sentences, progress(srs_level, last_correct_day)")
+    .select("id, word, senses, synonyms, antonyms, phrases, sentences, progress(srs_level, last_correct_day, last_wrong_day)")
     .eq("set_id", s.id)
     .order("position");
   if (error) { $("stHead").textContent = `${s.name} · 불러오지 못했어요`; return; }
@@ -83,7 +85,7 @@ function setup() {
 function pool() { return words.filter(usable); }
 function plan() {
   const list = pool(), n = list.length, take = pickCount ? Math.min(pickCount, n) : n;
-  const fresh = list.filter(w => !doneToday(w)).length;
+  const fresh = list.filter(w => !noCoinToday(w)).length;
   const how = pickLevel < 0
     ? "단어마다 지금 단계 문제가 나와요."
     : `모든 단어가 ${pickLevel + 1}단계(${TYPE_NAME[pickLevel]}) 문제로 나와요. 내 단계보다 높으면 도전이라 맞히면 ${pickLevel >= 4 ? "6단계가 되고" : `${pickLevel + 2}단계로 올라가고`}, 틀려도 단계는 그대로예요. 내 단계보다 낮으면 복습이에요.`;
@@ -108,8 +110,8 @@ $("stSetup").addEventListener("click", e => {
 async function begin() {
   const list = pool();
   // 오늘 아직 코인을 안 받은 단어부터, 그 안에서는 섞어서
-  const fresh = shuffle(list.filter(w => !doneToday(w)));
-  const done = shuffle(list.filter(w => doneToday(w)));
+  const fresh = shuffle(list.filter(w => !noCoinToday(w)));
+  const done = shuffle(list.filter(w => noCoinToday(w)));
   queue = [...fresh, ...done];
   if (pickCount) queue = queue.slice(0, pickCount);
   idx = 0;
@@ -120,6 +122,16 @@ async function begin() {
   ask();
 }
 
+/* 문제를 낸 시각을 서버에 남긴다(너무 빠른 자동 풀이 거르기, sql/04_study.sql). 실패하면 한 번 더.
+   끝내 실패하면 false — 답할 때 다시 남기고, 학생에게 "연결" 문제라고 알린다(코인을 못 받는 이유가 엉뚱하지 않게). */
+async function issue(id, tries = 2) {
+  for (let i = 0; i < tries; i++) {
+    const { error } = await db.rpc("issue_question", { p_word: id });
+    if (!error) return true;
+  }
+  return false;
+}
+
 function ask() {
   const w = queue[idx];
   const mine = levelOf(w);
@@ -127,13 +139,15 @@ function ask() {
   const type = pick(typesForLevel(w, level));
   const q = question(w, type);
   // 문제를 낸 시각을 서버에 남긴다(너무 빠른 자동 풀이 거르기, sql/04_study.sql). 답하기 전에 끝나 있으면 된다.
-  cur = { w, level, type, issued: db.rpc("issue_question", { p_word: w.id }).then(() => {}, () => {}) };
+  cur = { w, level, type, issued: issue(w.id) };
   const mode = level > mine ? " · 도전" : level < mine ? " · 복습" : "";
 
   $("stHead").textContent = `${set.name} · ${idx + 1} / ${queue.length}`;
   $("stBar").style.width = (idx / queue.length * 100) + "%";
   $("stType").textContent = `${level + 1}단계${mode} · ${q.label} · ` +
-    (doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요" : `맞히면 ${COINS[level]}코인`);
+    (doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요"
+      : wrongToday(w) ? "오늘 한 번 틀린 단어라 코인은 내일 받아요"
+      : `맞히면 ${COINS[coinLevel(level, type)]}코인`);
 
   if (q.cloze) {
     $("stBig").innerHTML = `${esc(q.cloze.before)}<span class="blank">${"_".repeat(Math.max(3, q.cloze.answer.length))}</span>${esc(q.cloze.after)}`;
@@ -162,7 +176,14 @@ async function submit(answer) {
 
   let res, body;
   try {
-    await cur.issued;
+    if (!(await cur.issued)) {
+      busy = false;
+      cur.issued = issue(cur.w.id);
+      showResult("bad", "인터넷 연결이 불안정해서 문제를 서버에 기록하지 못했어요. 잠시 뒤에 같은 답을 다시 보내 주세요.");
+      $("stInput").disabled = $("stGo").disabled = $("stSkip").disabled = false;
+      $("stNext").hidden = true;
+      return;
+    }
     const { data: { session } } = await db.auth.getSession();
     res = await fetch("/api/answer", {
       method: "POST",
@@ -202,7 +223,9 @@ async function submit(answer) {
 
   // 화면의 단계·날짜를 서버 값으로
   const p = cur.w.progress?.[0] ?? {};
-  cur.w.progress = [{ ...p, srs_level: body.level, last_correct_day: body.correct && !body.already_today ? kstToday() : p.last_correct_day }];
+  cur.w.progress = [{ ...p, srs_level: body.level,
+    last_correct_day: body.correct && body.coins ? kstToday() : p.last_correct_day,
+    last_wrong_day: body.correct ? p.last_wrong_day : kstToday() }];
   // 코인은 맞힐 때마다 서버 지갑에 바로 들어간다(record_answer). 중간에 그만둬도 이미 받은 코인은 그대로.
   if (body.balance != null) setBalance(body.balance);
   if (body.coins) coinPop("stCoinChip", body.coins);
@@ -214,6 +237,8 @@ async function submit(answer) {
   if (body.correct) {
     showResult("good", body.already_today
       ? `맞았어요! 이 단어는 오늘 코인을 이미 받았어요.`
+      : body.after_wrong
+      ? `맞았어요! 오늘 한 번 틀린 단어라 코인과 단계는 내일 다시 도전해요.`
       : `맞았어요! +${body.coins}코인이 들어왔어요 · ${moved}`, body.answer);
   } else {
     showResult("bad", `${answer ? "틀렸어요." : "괜찮아요."} ${moved}`, body.answer);

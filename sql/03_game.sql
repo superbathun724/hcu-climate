@@ -43,6 +43,8 @@ alter table public.players add column if not exists locked_at   timestamptz;   -
 alter table public.players add column if not exists lock_reason text;
 alter table public.players add column if not exists strikes     integer not null default 0;  -- 서버 속도 경고 횟수
 alter table public.players add column if not exists strike_at   timestamptz;
+-- 화면이 매크로 같다고 알린 경우 바로 잠그지 않고 잠깐 쉬게 한다(사람이 리듬 타며 누르다 걸려도 손해가 작게).
+alter table public.players add column if not exists tap_pause_until timestamptz;
 
 -- ---------- 보낸 기록 (순위의 근거) ----------
 -- 반·동아리를 보낼 때 같이 적는다. 한 번 보내면 반 순위와 동아리 순위에 동시에 들어간다.
@@ -112,6 +114,9 @@ create or replace function public.tap_speed() returns integer language sql immut
 -- API 를 직접 부르는 봇은 하루 종일 돌리면 걸린다. 효율이 구간마다 절반이라
 -- 봇이 이 아래에서 멈춰도 열심히 하는 학생과 코인 차이가 크지 않다.
 create or replace function public.tap_day_max() returns integer language sql immutable as $$ select 80000 $$;
+-- 화면이 매크로 같다고 알렸을 때: 몇 분 쉬게 할지, 24시간 안에 몇 번째면 잠글지
+create or replace function public.tap_pause_min()     returns integer language sql immutable as $$ select 5 $$;
+create or replace function public.tap_flags_to_lock() returns integer language sql immutable as $$ select 3 $$;
 
 -- 코인 몇 개가 대비율 1% 인가 (un-summit DEF_PER_PCT 20 을 그대로 가져옴)
 create or replace function public.coins_per_pct() returns integer language sql immutable as $$ select 20 $$;
@@ -291,12 +296,15 @@ begin
   return jsonb_build_object(
     'balance', p.balance, 'taps_today', p.taps_today,
     'rate', public.tap_rate(p.taps_today), 'sent', p.sent,
-    'locked', p.locked_at is not null);
+    'locked', p.locked_at is not null,
+    'paused_until', case when p.tap_pause_until > now() then p.tap_pause_until end);
 end;
 $$;
 
 -- 탭 올리기. 브라우저는 2초쯤마다 모아서 "n번 눌렀다"를 보낸다.
--- p_flag: 화면이 누르는 패턴이 매크로 같다고 본 경우 그 근거. 오면 잠근다.
+-- p_flag: 화면이 누르는 패턴이 매크로 같다고 본 경우 그 근거.
+--         화면 검사는 사람도 가끔 걸릴 수 있어서 바로 잠그지 않는다. 5분 동안 탭 코인을 멈추고(tap_pause_min),
+--         24시간 안에 3번째로 오면 그때 잠근다(tap_flags_to_lock).
 -- 서버는 지난번 이후 흐른 시간으로 n 을 한 번 더 자르고, 사람 속도보다 훨씬 많이 보내는 일이
 -- 1분 안에 3번 생기면 잠근다. 하루 한도는 없다.
 drop function if exists public.submit_taps(integer);
@@ -316,12 +324,24 @@ begin
     return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
   end if;
 
+  if p.tap_day is distinct from v_today then p.taps_today := 0; end if;
+
   if p_flag is not null then
-    perform public.lock_player(v_uid, 'tap-pattern', p_flag);
-    return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
+    insert into public.flags (user_id, reason, detail) values (v_uid, 'tap-pattern', p_flag);
+    if (select count(*) from public.flags where user_id = v_uid and reason = 'tap-pattern'
+          and created_at > now() - interval '24 hours') >= public.tap_flags_to_lock() then
+      perform public.lock_player(v_uid, 'tap-pattern', p_flag || jsonb_build_object('times_24h', public.tap_flags_to_lock()));
+      return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
+    end if;
+    update public.players set tap_pause_until = now() + make_interval(mins => public.tap_pause_min()) where user_id = v_uid
+      returning tap_pause_until into p.tap_pause_until;
+    return jsonb_build_object('paused_until', p.tap_pause_until, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
   end if;
 
-  if p.tap_day is distinct from v_today then p.taps_today := 0; end if;
+  if p.tap_pause_until > now() then              -- 쉬는 중: 세지 않는다
+    return jsonb_build_object('paused_until', p.tap_pause_until, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
+  end if;
+
 
   v_elapsed := least(extract(epoch from (now() - coalesce(p.last_tap_at, now() - interval '10 seconds'))), 10);
   v_allowed := floor(v_elapsed * public.tap_speed())::integer + 5;
@@ -434,7 +454,8 @@ returns jsonb language sql stable security definer set search_path = public as $
 $$;
 
 -- ---------- 순위: 이번 기간에 보낸 코인의 1인당 평균 ----------
--- 분모는 가입한 학생 수. 인원이 적은 팀도 1등을 할 수 있다.
+-- 분모는 가입하고 메일 인증까지 마친 사람 수. 인원이 적은 팀도 1등을 할 수 있다.
+-- (인증 안 한 계정을 세면, 없는 주소로 남의 반을 골라 가입만 해서 그 반 평균을 깎을 수 있다)
 -- 개인 이름·이메일은 돌려주지 않는다. 팀 단위 숫자만.
 -- 돌려주는 열이 늘어서(반 이름) 다시 만든다. 교사 팀은 맡은 지역이 없어 region_name 이 비어 있다.
 drop function if exists public.rank_classes();
@@ -444,7 +465,8 @@ language sql stable security definer set search_path = public as $$
   with w as (select starts, ends from public.rank_window()),
   t as (
     select c.id, coalesce(c.name, c.id || '반') as cname, r.name as rname,
-           (select count(*) from public.profiles p where p.class_id = c.id)::integer as m,
+           (select count(*) from public.profiles p join auth.users u on u.id = p.user_id
+             where p.class_id = c.id and u.email_confirmed_at is not null)::integer as m,
            coalesce((select sum(amount) from public.sends s, w
                       where s.class_id = c.id and s.sent_at >= w.starts and s.sent_at < w.ends), 0)::bigint as sent,
            coalesce((select sum(amount) from public.sends s where s.class_id = c.id
@@ -460,7 +482,8 @@ language sql stable security definer set search_path = public as $$
   with w as (select starts, ends from public.rank_window()),
   t as (
     select k.id, k.name,
-           (select count(*) from public.profiles p where p.club_id = k.id)::integer as m,
+           (select count(*) from public.profiles p join auth.users u on u.id = p.user_id
+             where p.club_id = k.id and u.email_confirmed_at is not null)::integer as m,
            coalesce((select sum(amount) from public.sends s, w
                       where s.club_id = k.id and s.sent_at >= w.starts and s.sent_at < w.ends), 0)::bigint as sent
       from public.clubs k)

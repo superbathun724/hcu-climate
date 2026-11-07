@@ -10,6 +10,7 @@ import { $, esc, onProfile, num1, shieldText } from "./ui.js";
 let kind = "class";
 let me = null;
 let roundEnd = 0;          // 이번 기간이 끝나는 시각(ms)
+let unit = "week";         // 서버가 정한 순위 기간(rank_round)
 const UNIT = { day: "오늘", week: "이번 주", month: "이번 달" };
 
 function left(ms) {
@@ -39,6 +40,7 @@ async function load() {
   if (cls.error || reg.error) { $("rankList").innerHTML = `<p class="note">순위를 불러오지 못했어요.</p>`; return; }
   if (round.data) {
     roundEnd = new Date(round.data.ends).getTime();
+    unit = round.data.unit;
     $("roundName").textContent = `${UNIT[round.data.unit] ?? "이번 기간"} 순위`;
     const end = new Date(round.data.ends);
     $("round").title = `${end.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short", hour: "numeric" })}에 새로 시작`;
@@ -52,7 +54,7 @@ async function load() {
   if (mine && !mine.region_name) {
     $("myRegion").innerHTML = `
       <small>${esc(mine.class_name)} 팀 · 맡은 지역 없이 어디든 도와요</small>
-      <div class="big">이번 주 ${Number(mine.sent).toLocaleString()}코인</div>
+      <div class="big">${UNIT[unit] ?? "이번 기간"} ${Number(mine.sent).toLocaleString()}코인</div>
       <small>가입 ${mine.members}명 · 한 사람당 ${mine.per_capita == null ? "–" : num1(mine.per_capita)} · 오늘 ${Number(mine.sent_today).toLocaleString()}코인</small>`;
   } else $("myRegion").innerHTML = `
     <small>우리 ${me.className === "교사" ? "팀" : "반"}이 돕는 곳 · <b>${esc(mine?.region_name ?? "")}</b></small>
