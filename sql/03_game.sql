@@ -134,12 +134,10 @@ drop function if exists public.tap_coins(integer, integer);
 drop function if exists public.tap_rate(integer);
 drop function if exists public.tap_band();
 
--- 사람이 낼 수 있는 속도. 1초에 15번, 한 번에 모아 보낼 수 있는 시간은 최대 10초.
-create or replace function public.tap_speed() returns integer language sql immutable as $$ select 15 $$;
+-- 한 번에 받는 양의 상한을 정하는 속도(넉넉히 1초에 30번 + 200). 넘는 만큼은 세지 않을 뿐 잠그지 않는다.
+create or replace function public.tap_speed() returns integer language sql immutable as $$ select 30 $$;
 
--- 하루에 사람이 낼 수 없는 누른 횟수. 넘으면 봇으로 보고 잠근다(관리자가 풀 수 있다).
--- 8만 번 = 초당 5번으로 4시간 반을 쉬지 않고 눌러야 하는 양. 사람은 닿지 않고,
--- (탭이 에너지로 묶인 뒤로는 닿기 어렵지만, 비정상 호출을 거르는 안전장치로 둔다)
+-- (지금은 쓰지 않음) 예전에 하루 누른 횟수로 잠그던 기준. 탭이 무료 + 에너지로 묶여 뺐다.
 create or replace function public.tap_day_max() returns integer language sql immutable as $$ select 80000 $$;
 -- 화면이 매크로 같다고 알렸을 때: 몇 분 쉬게 할지, 24시간 안에 몇 번째면 잠글지
 create or replace function public.tap_pause_min()     returns integer language sql immutable as $$ select 5 $$;
@@ -370,29 +368,19 @@ begin
   end if;
 
 
+  -- 한 번에 받는 양의 넉넉한 상한(잠그지 않는다). 누를 수 있는 횟수는 아래 무료 + 에너지로 정해지므로
+  -- 속도로 잠글 이유가 없다. 예전에는 "사람보다 빠름" 3번이면 잠갔는데, 학교 와이파이에서 요청이
+  -- 늦게 몰려 들어오면 손으로 빨리 누른 사람도 걸려서 뺐다.
   v_elapsed := least(extract(epoch from (now() - coalesce(p.last_tap_at, now() - interval '10 seconds'))), 10);
-  v_allowed := floor(v_elapsed * public.tap_speed())::integer + 5;
+  v_allowed := floor(v_elapsed * public.tap_speed())::integer + 200;
 
-  -- 사람 속도보다 훨씬 많이 보냄 → 경고. 1분 안에 3번이면 잠금
-  if coalesce(p_n, 0) > v_allowed + 20 then
-    v_strikes := case when p.strike_at > now() - interval '60 seconds' then p.strikes + 1 else 1 end;
-    update public.players set strikes = v_strikes, strike_at = now() where user_id = v_uid;
-    if v_strikes >= 3 then
-      perform public.lock_player(v_uid, 'too-fast', jsonb_build_object('sent', p_n, 'allowed', v_allowed, 'strikes', v_strikes));
-      return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
-    end if;
-  end if;
-
-  v_take  := greatest(0, least(coalesce(p_n, 0), v_allowed, 500));
+  v_take  := greatest(0, least(coalesce(p_n, 0), v_allowed, 1000));
   -- 누를 수 있는 만큼만: 오늘 남은 무료 + 에너지
   v_free  := greatest(public.tap_free_daily() - p.taps_today, 0);
   v_take  := least(v_take, v_free + p.energy);
   v_use   := greatest(v_take - v_free, 0);                     -- 이번에 쓰는 에너지
 
-  if p.taps_today + v_take > public.tap_day_max() then
-    perform public.lock_player(v_uid, 'too-many', jsonb_build_object('taps_today', p.taps_today + v_take, 'max', public.tap_day_max()));
-    return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
-  end if;
+  -- (하루 누른 횟수로 잠그던 규칙은 뺐다. 에너지를 많이 모은 학생이 오래 누르다 걸릴 수 있어서)
 
   v_coins := v_take;                                           -- 한 번에 1코인
 

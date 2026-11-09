@@ -8,11 +8,9 @@
    코인은 서버가 계산한 값으로 맞춘다. 화면의 숫자는 그 사이를 잇는 어림값일 뿐이다.
    한 번에 1코인. 하루 무료 1,000번 + 단어를 맞혀 모은 에너지만큼 누를 수 있다(sql/03_game.sql, 04_study.sql).
 
-   매크로 감지: 스크립트가 만든 가짜 누름(isTrusted=false)만 본다.
-   예전에는 "간격이 일정함·같은 자리를 빠르게"도 봤는데, 마우스로 꾸준히 누르는 사람이 걸려서 뺐다.
-   이제 누를 수 있는 횟수가 무료 탭 + 에너지로 정해져 있어서, 자동 클릭을 써도 더 벌 수 없다.
-   가짜 누름이면 5분 쉬게 하고(submit_taps 의 p_flag), 24시간 안에 3번째면 서버가 잠근다.
-   서버는 따로 "사람이 낼 수 없는 속도(초당 15번 넘게)"를 본다.
+   매크로·속도 검사로 잠그지 않는다. 누를 수 있는 횟수가 무료 탭 + 에너지로 정해져 있어서
+   빨리 누르든 자동 클릭을 쓰든 더 벌 수 없다. 스크립트가 만든 가짜 누름(isTrusted=false)만 조용히 세지 않는다.
+   서버는 한 번에 받는 양에 넉넉한 상한만 둔다(잠그지 않음).
    ========================================================== */
 import { db, SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 import { $, setBalance, getBalance, onProfile, tick, num1, shieldText } from "./ui.js";
@@ -184,22 +182,14 @@ function pauseUntil(iso) {
   pauseTimer = setTimeout(() => { ready = true; tick("다시 누를 수 있어요."); }, ms + 500);
 }
 
-/* ---------- 매크로 검사 ---------- */
-const log = [];           // (예전 간격 검사용. 쉬기 시작할 때 비운다)
-function suspicious(e) {
-  if (!e.isTrusted) return { reason: "synthetic" };    // 스크립트가 만든 누름만
-  return null;
-}
+/* ---------- 누름 ----------
+   매크로 검사는 하지 않는다. 누를 수 있는 횟수가 무료 탭 + 에너지로 정해져 있어서
+   빨리 누르든 자동 클릭을 쓰든 더 벌 수 없기 때문이다. 스크립트가 만든 가짜 누름만 조용히 세지 않는다. */
+const log = [];
 
 $("scene").addEventListener("pointerdown", e => {
   if (!ready) return;
-  const bad = suspicious(e);
-  if (bad) {
-    ready = false;
-    flag = { ...bad, at: new Date().toISOString(), ua: navigator.userAgent.slice(0, 120) };
-    flush();
-    return;
-  }
+  if (!e.isTrusted) return;
   if (freeLeft + energy <= 0) {                      // 남은 탭이 없음: 세지 않고 안내만
     if (Date.now() - emptyAt > 4000) { emptyAt = Date.now(); tick("남은 탭이 없어요. 단어를 맞혀 에너지를 모으면 더 누를 수 있어요."); }
     return;
