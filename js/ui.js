@@ -101,3 +101,24 @@ export const shieldText = v => {
 /* 계정 잠금 화면. 서버가 잠겼다고 하면 어느 화면에서든 이 이벤트를 보낸다. */
 window.addEventListener("hcu:locked", () => { $("lockScreen").hidden = false; });
 window.addEventListener("hcu:signout", () => { $("lockScreen").hidden = true; });
+
+/* ---------- 화면이 바뀌면 항상 맨 위에서 시작 ----------
+   탭(section), 로그인 화면(#gate), 잠금 화면, 단어장 보기·단어 공부 같은 팝업(.panel),
+   공부 화면 안의 단계(설정 → 문제 → 결과)가 새로 보일 때 페이지와 그 팝업의 스크롤을 0 으로.
+   팝업은 #app 안에 겹쳐 뜨므로, 페이지가 아래로 내려가 있으면 팝업 윗부분이 화면 밖에 있게 된다. */
+export function toTop(el) {
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  for (let n = el; n && n !== document.body; n = n.parentElement) if (n.scrollTop) n.scrollTop = 0;
+}
+const LAYER = ".panel, #gate, #lockScreen, main > section, #stSetup, #stCard, #stDone";
+const ON_CLASS = "#gate, main > section";            // 이 둘은 hidden 대신 class="on" 으로 보인다
+new MutationObserver(list => {
+  for (const m of list) {
+    const el = m.target;
+    if (!(el instanceof Element) || !el.matches(LAYER)) continue;
+    const shown = m.attributeName === "hidden"
+      ? m.oldValue !== null && !el.hidden
+      : el.matches(ON_CLASS) && el.classList.contains("on") && !(m.oldValue ?? "").split(/\s+/).includes("on");
+    if (shown) toTop(el);
+  }
+}).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["hidden", "class"], attributeOldValue: true });

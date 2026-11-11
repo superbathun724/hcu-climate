@@ -10,7 +10,7 @@
    답은 /api/answer 로 보내고, 맞았는지·코인·새 단계는 서버가 정해서 돌려준다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, setBalance, getBalance, coinPop, tick, kstToday, mis } from "./ui.js";
+import { $, esc, setBalance, getBalance, coinPop, tick, kstToday, mis, toTop } from "./ui.js";
 import { typesForLevel, question, COINS, ENERGY, coinLevel } from "./quiz-core.js";
 
 const COUNTS = [10, 20, 30, 0];          // 0 = 전체
@@ -166,7 +166,8 @@ function ask() {
   $("stRes").hidden = true;
   $("stNext").hidden = true;
   $("stCard").hidden = false;
-  inp.focus();
+  toTop($("stCard"));                       // 다음 문제도 맨 위에서 (문제 카드는 계속 보이는 채라 감시로는 안 잡힌다)
+  inp.focus({ preventScroll: true });
 }
 
 async function submit(answer) {
