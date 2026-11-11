@@ -65,7 +65,13 @@ alter table public.word_sets enable row level security;
 alter table public.words     enable row level security;
 alter table public.progress  enable row level security;
 
-grant select on public.word_sets, public.words, public.progress to authenticated;
+grant select on public.word_sets, public.progress to authenticated;
+-- 단어는 열마다 따로 연다. 학생 화면(단어장 보기·공부)이 쓰는 열만.
+-- 유의어·반의어·예문·메모는 문제의 답이 들어 있어 학생 계정으로는 못 읽는다.
+-- 문제는 서버(functions/api/question.js)가 비밀 키로 읽어 답을 뺀 채로 보낸다.
+-- 관리자 내려받기는 admin_export_set 으로.
+revoke select on public.words from anon, authenticated;
+grant select (id, set_id, position, word, senses, phrases) on public.words to authenticated;
 revoke insert, update, delete on public.word_sets, public.words, public.progress from anon, authenticated;
 
 drop policy if exists word_sets_read on public.word_sets;
@@ -274,6 +280,19 @@ revoke execute on function public.admin_set_hidden(bigint, boolean) from public,
 revoke execute on function public.admin_delete_set(bigint)          from public, anon;
 revoke execute on function public.admin_restore_set(bigint)         from public, anon;
 revoke execute on function public.purge_deleted_sets()              from public, anon, authenticated;
+-- 관리자 내려받기 (모든 열). 학생 계정은 유의어·반의어·예문 열을 못 읽으므로 이 함수로만.
+create or replace function public.admin_export_set(p_set bigint)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.require_admin();
+  return coalesce((select jsonb_agg(jsonb_build_object(
+      'word', w.word, 'senses', w.senses, 'notes', w.notes, 'synonyms', w.synonyms,
+      'antonyms', w.antonyms, 'phrases', w.phrases, 'sentences', w.sentences) order by w.position)
+    from public.words w where w.set_id = p_set), '[]'::jsonb);
+end;
+$$;
+revoke execute on function public.admin_export_set(bigint) from public, anon;
+grant  execute on function public.admin_export_set(bigint)          to authenticated;
 grant  execute on function public.admin_upload_set(text, jsonb)     to authenticated;
 grant  execute on function public.admin_rename_set(bigint, text)    to authenticated;
 grant  execute on function public.admin_set_hidden(bigint, boolean) to authenticated;

@@ -16,9 +16,15 @@
 --
 -- 자동 풀이(봇) 대비 — 사람은 거의 걸리지 않고, 걸려도 손해가 없게
 --   1. 문제를 받은 지 1.5초 안에 들어온 정답은 코인을 주지 않는다. 단계·날짜도 그대로 두어
---      다시 풀면 코인을 받을 수 있다. (화면이 문제를 낼 때 issue_question 으로 시각을 남긴다)
+--      다시 풀면 코인을 받을 수 있다. (서버가 문제를 낼 때 issue_question_srv 로 시각을 남긴다)
 --   2. 1분에 코인을 받는 정답은 20개까지. 넘으면 1번과 같이 채점만 하고 그대로 둔다.
 --   3. 최근 30번의 답 간격이 기계처럼 일정하면(평균 8초 미만, 흔들림 3% 미만) 계정을 잠근다.
+--   4. 문제는 서버(functions/api/question.js)가 낸다. 학생 화면에는 유의어·반의어·예문 같은 답이 오지 않고,
+--      서버가 낸 유형이 아닌 답은 받지 않는다(쉬운 유형으로 바꿔 치기 못 함).
+--   5. 답 길이에 맞춰 최소 시간이 늘어난다(1.5초 + 글자당 0.04초).
+--   6. 붙여넣기 등으로 직접 타자를 치지 않은 답은 코인 없이 채점만 한다(p_typed).
+--   7. 최근 40문제가 거의 다 맞고(97% 이상) 답하는 시간의 가운데 값이 2초 미만이면
+--      10분 동안 코인만 쉬어 간다(잠그지 않는다. 채점·연습은 그대로).
 --      사람은 문제마다 생각하는 시간이 달라 여기에 닿지 않는다.
 --      탭 매크로와 같이 관리자가 푼다.
 --
@@ -45,6 +51,11 @@ create table if not exists public.answer_log (
   paid    boolean not null default false
 );
 create index if not exists answer_log_user_idx on public.answer_log (user_id, at);
+alter table public.quiz_issues add column if not exists qtype  text;       -- 서버가 낸 문제 유형
+alter table public.quiz_issues add column if not exists qlevel smallint;   -- 서버가 낸 문제의 단계
+alter table public.answer_log  add column if not exists rt_ms   integer;   -- 문제를 받고 답하기까지(ms)
+alter table public.answer_log  add column if not exists correct boolean;
+alter table public.players     add column if not exists quiz_pause_until timestamptz;   -- 7번: 코인만 쉬는 때
 alter table public.quiz_issues enable row level security;
 alter table public.answer_log  enable row level security;
 revoke all on public.quiz_issues, public.answer_log from anon, authenticated;   -- 아래 함수로만
@@ -52,15 +63,19 @@ revoke all on public.quiz_issues, public.answer_log from anon, authenticated;   
 create or replace function public.quiz_min_ms()    returns integer language sql immutable as $$ select 1500 $$;
 create or replace function public.quiz_paid_per_min() returns integer language sql immutable as $$ select 20 $$;
 
--- 화면이 문제를 보여 줄 때 부른다
-create or replace function public.issue_question(p_word bigint)
+-- 문제를 낸 시각·유형을 남긴다. 서버 함수(functions/api/question.js)만 부른다.
+-- 예전에는 화면이 issue_question 으로 직접 남겼다. 봇이 시각만 미리 찍어 둘 수 있어 없앤다.
+drop function if exists public.issue_question(bigint);
+create or replace function public.issue_question_srv(p_user uuid, p_word bigint, p_type text, p_level smallint)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if auth.uid() is null then raise exception '로그인이 필요해요.' using errcode = '42501'; end if;
-  insert into public.quiz_issues (user_id, word_id, issued_at) values (auth.uid(), p_word, now())
-  on conflict (user_id, word_id) do update set issued_at = now();
+  insert into public.quiz_issues (user_id, word_id, issued_at, qtype, qlevel) values (p_user, p_word, now(), p_type, p_level)
+  on conflict (user_id, word_id) do update set issued_at = now(), qtype = excluded.qtype, qlevel = excluded.qlevel;
 end;
 $$;
+revoke execute on function public.issue_question_srv(uuid, bigint, text, smallint) from public, anon, authenticated;
+grant  execute on function public.issue_question_srv(uuid, bigint, text, smallint) to service_role;
+grant select on public.quiz_issues to service_role;
 
 -- 단계별 코인 (js/quiz-core.js 의 COINS 와 같게)
 create or replace function public.word_coins(p_level integer)
@@ -77,12 +92,13 @@ returns integer language sql immutable as $$ select 100 * public.word_coins(p_le
 -- 예전 함수(칸 수가 다른 것)는 지운다. 남아 있으면 이름이 같은 함수가 둘이 된다.
 drop function if exists public.record_answer(uuid, bigint, boolean);
 drop function if exists public.record_answer(uuid, bigint, boolean, smallint);
+drop function if exists public.record_answer(uuid, bigint, boolean, smallint, smallint);
 
 -- p_level: 고른 단계(단계 오르내림은 이것으로)
 -- p_pay  : 코인을 매기는 단계 = 실제로 나온 문제 유형의 단계 (js/quiz-core.js coinLevel).
 --          6단계를 골랐어도 자료가 없어 철자 문제가 나왔으면 2코인. 비우면 p_level 과 같다.
 create or replace function public.record_answer(p_user uuid, p_word bigint, p_correct boolean, p_level smallint,
-                                                p_pay smallint default null)
+                                                p_pay smallint default null, p_typed boolean default true, p_len smallint default 0)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -96,7 +112,10 @@ declare
   v_already boolean := false;
   v_balance numeric;
   v_issued timestamptz;
-  v_throttle text;            -- null | 'fast' | 'busy'
+  v_throttle text;            -- null | 'fast' | 'busy' | 'typed' | 'pause'
+  v_rt integer;               -- 문제를 받고 답하기까지(ms)
+  v_pause timestamptz;
+  v_acc numeric; v_med numeric; v_m integer;
   v_pays boolean;             -- 이번 답이 코인을 받는 답인가 (정답 + 오늘 아직 안 받았고 안 틀린 단어)
   v_n integer; v_mean numeric; v_sd numeric;
 begin
@@ -120,9 +139,15 @@ begin
   select issued_at into v_issued from public.quiz_issues where user_id = p_user and word_id = p_word;
   delete from public.quiz_issues where user_id = p_user and word_id = p_word;      -- 한 문제에 한 번
   v_pays := p_correct and pr.last_correct_day is distinct from v_today and pr.last_wrong_day is distinct from v_today;
+  v_rt := case when v_issued is null then null else (extract(epoch from now() - v_issued) * 1000)::integer end;
+  select quiz_pause_until into v_pause from public.players where user_id = p_user;
   if v_pays then
-    if v_issued is null or now() - v_issued < make_interval(secs => public.quiz_min_ms() / 1000.0) then
+    if v_issued is null or v_rt < public.quiz_min_ms() + 40 * greatest(coalesce(p_len, 0), 0) then
       v_throttle := 'fast';
+    elsif not coalesce(p_typed, true) then
+      v_throttle := 'typed';
+    elsif v_pause > now() then
+      v_throttle := 'pause';
     elsif (select count(*) from public.answer_log
             where user_id = p_user and paid and at > now() - interval '60 seconds') >= public.quiz_paid_per_min() then
       v_throttle := 'busy';
@@ -131,7 +156,16 @@ begin
 
   -- 3. 답 간격 검사 (정답·오답 모두)
   delete from public.answer_log where user_id = p_user and at < now() - interval '1 hour';
-  insert into public.answer_log (user_id, paid) values (p_user, v_pays and v_throttle is null);
+  insert into public.answer_log (user_id, paid, rt_ms, correct) values (p_user, v_pays and v_throttle is null, v_rt, p_correct);
+  -- 7. 거의 다 맞으면서 너무 빠르면 10분 동안 코인만 쉰다
+  select count(*), avg(case when correct then 1 else 0 end), percentile_cont(0.5) within group (order by rt_ms)
+    into v_m, v_acc, v_med
+    from (select correct, rt_ms from public.answer_log
+           where user_id = p_user and rt_ms is not null order by at desc limit 40) z;
+  if v_m >= 40 and v_acc >= 0.97 and v_med < 2000 and (v_pause is null or v_pause < now()) then
+    update public.players set quiz_pause_until = now() + interval '10 minutes' where user_id = p_user;
+    if v_pays and v_throttle is null then v_throttle := 'pause'; end if;
+  end if;
   select count(*), avg(gap), stddev_pop(gap) into v_n, v_mean, v_sd from (
     select extract(epoch from at - lag(at) over (order by at)) as gap
       from (select at from public.answer_log where user_id = p_user order by at desc limit 31) t
@@ -196,7 +230,5 @@ $$;
 grant select on public.words, public.word_sets, public.progress to service_role;
 
 -- 서버 함수(비밀 키 = service_role)만 부를 수 있다.
-revoke execute on function public.record_answer(uuid, bigint, boolean, smallint, smallint) from public, anon, authenticated;
-grant  execute on function public.record_answer(uuid, bigint, boolean, smallint, smallint) to service_role;
-revoke execute on function public.issue_question(bigint) from public, anon;
-grant  execute on function public.issue_question(bigint) to authenticated;
+revoke execute on function public.record_answer(uuid, bigint, boolean, smallint, smallint, boolean, smallint) from public, anon, authenticated;
+grant  execute on function public.record_answer(uuid, bigint, boolean, smallint, smallint, boolean, smallint) to service_role;

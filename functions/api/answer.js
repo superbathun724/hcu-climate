@@ -2,8 +2,9 @@
    POST /api/answer — 단어 문제 채점 (Cloudflare Pages Function)
    (voca-web functions/api/trade.js 의 구조를 그대로 가져옴)
 
-   본문(JSON): { word_id, type, answer, level }
-               level: 학생이 고른 단계 0~5. 없으면(null) 그 단어의 지금 단계("내 단계대로")
+   본문(JSON): { word_id, type, answer, typed }
+               type 은 /api/question 이 낸 유형이어야 한다(단계도 그때 정해진 것을 쓴다).
+               typed: 화면에서 직접 타자를 쳤는가(붙여넣기·스크립트 입력이면 false → 코인 없이 채점만)
    머리:       Authorization: Bearer <로그인한 학생의 access token>
 
    ── 이 파일이 있는 이유 ──────────────────────────────────
@@ -19,7 +20,7 @@
      SUPABASE_URL          https://ktsxgtnontktkrxdkfbw.supabase.co
      SUPABASE_SERVICE_KEY  sb_secret_… (Secret 으로 넣는다. 저장소·채팅에 절대 넣지 않는다)
    ========================================================== */
-import { typesForLevel, check, answerText, coinLevel } from "../../js/quiz-core.js";
+import { check, answerText, coinLevel } from "../../js/quiz-core.js";
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
@@ -76,33 +77,31 @@ export async function onRequestPost({ request, env }) {
   const type = String(body?.type ?? "");
   const answer = String(body?.answer ?? "").slice(0, 200);
   if (!Number.isInteger(wordId) || wordId <= 0) return json({ error: "단어 번호가 이상해요." }, 400);
-  const chosen = body?.level == null ? null : Number(body.level);
-  if (chosen !== null && !(Number.isInteger(chosen) && chosen >= 0 && chosen <= 5)) {
-    return json({ error: "단계가 이상해요." }, 400);
-  }
+  const typed = body?.typed !== false;
 
   try {
     // 숨긴 단어장의 단어는 공부할 수 없다. 단어와 진도는 서로 기다릴 필요가 없어 한꺼번에 묻는다(시드니 왕복을 한 번 줄임).
-    const [[w], [pr]] = await Promise.all([
+    const [[w], [pr], [iss]] = await Promise.all([
       rest(env, `words?id=eq.${wordId}&select=id,word,senses,synonyms,antonyms,phrases,sentences,word_sets!inner(hidden,deleted_at)&word_sets.hidden=eq.false&word_sets.deleted_at=is.null`),
       rest(env, `progress?user_id=eq.${userId}&word_id=eq.${wordId}&select=srs_level`),
+      rest(env, `quiz_issues?user_id=eq.${userId}&word_id=eq.${wordId}&select=qtype,qlevel`),
     ]);
     if (!w) return json({ error: "단어를 찾을 수 없어요." }, 404);
 
     const level = pr?.srs_level ?? 0;
-    const asked = chosen ?? level;            // 이번 문제의 단계
-
-    // 화면이 낸 유형이 그 단계의 유형인지. ("내 단계대로"인데 다른 탭에서 단계가 바뀌었으면 다시 받게 한다)
-    if (!typesForLevel(w, asked).includes(type)) {
+    // 서버가 낸 문제(/api/question)에만 답할 수 있다. 유형·단계도 그때 정한 것.
+    if (!iss || iss.qtype !== type || iss.qlevel == null) {
       return json({ stale: true, level, error: "문제가 바뀌었어요. 다시 풀어 주세요." }, 409);
     }
+    const asked = iss.qlevel;
 
     const correct = check(w, type, answer);
 
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/record_answer`, {
       method: "POST",
       headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json" },
-      body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct, p_level: asked, p_pay: coinLevel(asked, type) }),
+      body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct, p_level: asked, p_pay: coinLevel(asked, type),
+                             p_typed: typed, p_len: Math.min(answer.trim().length, 200) }),
     });
     const text = await res.text();
     if (!res.ok) {

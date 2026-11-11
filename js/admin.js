@@ -122,9 +122,8 @@ function saveFile(text, filename) {
 }
 async function downloadSet(s, btn) {
   btn.disabled = true;
-  const { data, error } = await db.from("words")
-    .select("word, senses, notes, synonyms, antonyms, phrases, sentences")
-    .eq("set_id", s.id).order("position");
+  // 학생 계정이 못 읽는 열(유의어·반의어·예문)까지 담아야 해서 관리자 함수로 받는다(sql/02_words.sql)
+  const { data, error } = await db.rpc("admin_export_set", { p_set: s.id });
   btn.disabled = false;
   if (error) return say($("setMsg"), serverMsg(error));
   saveFile(wordsToCSV(data), `${s.name.replace(/[\\/:*?"<>|]/g, "_")}.csv`);

@@ -8,10 +8,15 @@
      복습(고른 단계 < 내 단계): 맞혀도 단계 그대로, 틀리면 한 단계 내려감
    코인은 고른 단계만큼, 같은 단어는 하루에 한 번. 실제 판정은 서버(sql/04_study.sql)가 한다.
    답은 /api/answer 로 보내고, 맞았는지·코인·새 단계는 서버가 정해서 돌려준다.
+
+   단어 매크로 막기
+     - 문제는 서버(/api/question)가 낸다. 화면은 유의어·반의어·예문 같은 답을 받지 않는다.
+     - 문제 글자는 글자(DOM)가 아니라 그림(canvas)으로 그린다. 화면 글자를 긁는 확장 프로그램이 못 읽게.
+     - 붙여넣기·끌어 놓기는 막고, 직접 타자를 쳤는지(typed)를 함께 보낸다. 안 쳤으면 코인 없이 채점만.
    ========================================================== */
 import { db } from "./config.js";
 import { $, esc, setBalance, getBalance, coinPop, tick, kstToday, mis, toTop } from "./ui.js";
-import { typesForLevel, question, COINS, ENERGY, coinLevel } from "./quiz-core.js";
+import { COINS, ENERGY } from "./quiz-core.js";
 
 const COUNTS = [10, 20, 30, 0];          // 0 = 전체
 const TYPE_NAME = ["뜻", "철자", "유의어", "표현", "예문", "종합"];
@@ -19,7 +24,8 @@ const TYPE_NAME = ["뜻", "철자", "유의어", "표현", "예문", "종합"];
 let set = null;        // {id, name}
 let queue = [];        // 이번 회차 단어들
 let idx = 0;
-let cur = null;        // {w, level, type}
+let cur = null;        // {w, level, type, pay, keys} 또는 {retry: true}
+let askSeq = 0;
 let busy = false;
 let stats = { right: 0, total: 0, coins: 0, energy: 0 };
 let words = [];        // 이 단어장의 단어 (내 진도 포함)
@@ -30,7 +36,6 @@ const levelOf = w => w.progress?.[0]?.srs_level ?? 0;
 const doneToday = w => w.progress?.[0]?.last_correct_day === kstToday();
 const wrongToday = w => w.progress?.[0]?.last_wrong_day === kstToday();      // 오늘 한 번 틀린 단어: 코인은 내일
 const noCoinToday = w => doneToday(w) || wrongToday(w);
-const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 async function start(s) {
@@ -45,7 +50,7 @@ async function start(s) {
 
   // progress 는 RLS 때문에 내 것만 붙어 온다
   const { data, error } = await db.from("words")
-    .select("id, word, senses, synonyms, antonyms, phrases, sentences, progress(srs_level, last_correct_day, last_wrong_day)")
+    .select("id, word, senses, phrases, progress(srs_level, last_correct_day, last_wrong_day)")   // 답이 든 열은 못 읽는다(sql/02_words.sql)
     .eq("set_id", s.id)
     .order("position");
   if (error) { $("stHead").innerHTML = mis(esc(s.name), "불러오지 못했어요"); return; }
@@ -55,7 +60,8 @@ async function start(s) {
 
 /* ---------- 시작 전: 단계와 개수 고르기 ---------- */
 const askLevel = w => (pickLevel < 0 ? levelOf(w) : pickLevel);          // 이 단어를 몇 단계 문제로 낼까
-const usable = w => typesForLevel(w, askLevel(w)).length > 0;
+// 문제를 낼 자료(뜻이나 표현)가 있는 단어. 유의어·예문만 있는 드문 단어는 서버가 알려 주면 건너뛴다.
+const usable = w => (w.senses ?? []).some(s => s.meaning) || (w.phrases ?? []).length > 0;
 
 function setup() {
   $("stHead").textContent = set.name;
@@ -122,74 +128,128 @@ async function begin() {
   ask();
 }
 
-/* 문제를 낸 시각을 서버에 남긴다(너무 빠른 자동 풀이 거르기, sql/04_study.sql). 실패하면 한 번 더.
-   끝내 실패하면 false — 답할 때 다시 남기고, 학생에게 "연결" 문제라고 알린다(코인을 못 받는 이유가 엉뚱하지 않게). */
-async function issue(id, tries = 2) {
-  for (let i = 0; i < tries; i++) {
-    const { error } = await db.rpc("issue_question", { p_word: id });
-    if (!error) return true;
+/* ---------- 문제 글자를 그림으로 ----------
+   글자를 DOM 에 두지 않고 canvas 에 그린다. 모양은 예전 .qword 와 같게(같은 글꼴·크기·색). */
+let lastQ = null;
+window.addEventListener("resize", () => { if (lastQ && !$("study").hidden) drawPrompt(lastQ); });
+function drawPrompt(q) {
+  lastQ = q;
+  const box = $("stBig");
+  const long = !!q.cloze || (q.big || "").length > 18;
+  box.className = "qword" + (long ? " long" : "");
+  let cv = box.querySelector("canvas");
+  if (!cv) { box.textContent = ""; cv = document.createElement("canvas"); cv.setAttribute("role", "img"); cv.setAttribute("aria-label", "문제"); box.append(cv); }
+  const cs = getComputedStyle(box);
+  const size = parseFloat(cs.fontSize), lh = size * (long ? 1.5 : 1.15);
+  const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const avail = Math.max(160, box.parentElement.clientWidth - pad - 8);
+  const ctx = cv.getContext("2d");
+  let fsize = size;
+  const setFont = () => { ctx.font = `${cs.fontWeight} ${fsize}px ${cs.fontFamily}`; };
+  setFont();
+  // 조각: 글자 또는 빈칸
+  const toks = [];
+  const push = text => text.split(/(\s+)/).forEach(t => t && toks.push({ t }));
+  if (q.cloze) { push(q.cloze.before); toks.push({ blank: Math.max(3, q.cloze.len) }); push(q.cloze.after); }
+  else push(q.big || "");
+  if (!long) { while (ctx.measureText(q.big || "").width > avail && fsize > 14) { fsize -= 2; setFont(); } }
+  const wOf = k => k.blank ? ctx.measureText("n").width * (k.blank + 1) : ctx.measureText(k.t).width;
+  // 줄 나누기 (띄어쓰기가 없는 긴 조각은 글자 단위로)
+  const lines = [[]]; let x = 0;
+  for (const k of toks) {
+    let w = wOf(k);
+    if (!k.blank && w > avail) {
+      for (const ch of k.t) { const cw = ctx.measureText(ch).width; if (x + cw > avail) { lines.push([]); x = 0; } lines.at(-1).push({ t: ch }); x += cw; }
+      continue;
+    }
+    if (x + w > avail && x > 0) { lines.push([]); x = 0; if (/^\s+$/.test(k.t ?? "")) continue; }
+    lines.at(-1).push(k); x += w;
   }
-  return false;
+  const widths = lines.map(l => l.reduce((a, k) => a + wOf(k), 0));
+  const W = long ? avail : Math.ceil(Math.max(...widths, 1)), H = Math.ceil(lines.length * lh);
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.ceil(W * dpr); cv.height = Math.ceil(H * dpr);
+  cv.style.width = W + "px"; cv.style.height = H + "px"; cv.style.display = "block";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); setFont();
+  ctx.fillStyle = cs.color; ctx.strokeStyle = cs.color; ctx.textBaseline = "middle"; ctx.lineWidth = 2;
+  lines.forEach((l, i) => {
+    let px = long ? 0 : (W - widths[i]) / 2; const py = i * lh + lh / 2;
+    for (const k of l) {
+      const w = wOf(k);
+      if (k.blank) { ctx.beginPath(); ctx.moveTo(px + 2, py + fsize * 0.45); ctx.lineTo(px + w - 2, py + fsize * 0.45); ctx.stroke(); }
+      else ctx.fillText(k.t, px, py);
+      px += w;
+    }
+  });
 }
 
-function ask() {
-  const w = queue[idx];
-  const mine = levelOf(w);
-  const level = askLevel(w);
-  const type = pick(typesForLevel(w, level));
-  const q = question(w, type);
-  // 문제를 낸 시각을 서버에 남긴다(너무 빠른 자동 풀이 거르기, sql/04_study.sql). 답하기 전에 끝나 있으면 된다.
-  cur = { w, level, type, issued: issue(w.id) };
-  const mode = level > mine ? "도전" : level < mine ? "복습" : "";
-
+async function ask() {
+  const w = queue[idx], seq = ++askSeq;
+  cur = null;
   $("stHead").innerHTML = mis(esc(set.name), `<span class="num">${idx + 1} / ${queue.length}</span>`);
   $("stBar").style.width = (idx / queue.length * 100) + "%";
+  $("stType").textContent = "문제를 불러오는 중…";
+  $("stSub").textContent = "";
+  const inp = $("stInput");
+  inp.value = ""; inp.disabled = true;
+  $("stGo").disabled = $("stSkip").disabled = true;
+  $("stRes").hidden = true; $("stNext").hidden = true;
+  $("stCard").hidden = false;
+  toTop($("stCard"));
+
+  let res, body;
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    res = await fetch("/api/question", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+      body: JSON.stringify({ word_id: w.id, level: pickLevel < 0 ? null : pickLevel }),
+    });
+    body = await res.json().catch(() => ({}));
+  } catch { body = { error: "인터넷 연결을 확인해 주세요." }; }
+  if (seq !== askSeq) return;                                  // 그사이 창을 닫았거나 다음으로 넘어감
+
+  if (res?.status === 422 && body.skip) {                       // 이 단어로는 문제를 낼 수 없음 → 건너뛰기
+    queue.splice(idx, 1);
+    return idx < queue.length ? ask() : queue.length ? finish() : finish("이 단어장에는 낼 수 있는 문제가 없어요.");
+  }
+  if (!res?.ok) {
+    if (/잠겨/.test(body.error || "")) window.dispatchEvent(new Event("hcu:locked"));
+    cur = { retry: true };
+    showResult("bad", body.error || "문제를 불러오지 못했어요.");
+    $("stNext").textContent = "다시 불러오기";
+    return;
+  }
+
+  const { q, level, type, pay, mine } = body;
+  w.progress = [{ ...(w.progress?.[0] ?? {}), srs_level: mine }];
+  cur = { w, level, type, pay, keys: 0 };
+  const mode = level > mine ? "도전" : level < mine ? "복습" : "";
   $("stType").innerHTML = mis(`${level + 1}단계${mode ? ` ${mode}` : ""}`, esc(q.label),
     doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요"
       : wrongToday(w) ? "오늘 한 번 틀린 단어라 코인은 내일 받아요"
-      : `맞히면 ${COINS[coinLevel(level, type)]}코인, 에너지 ${ENERGY[coinLevel(level, type)]}`);
-
-  if (q.cloze) {
-    $("stBig").innerHTML = `${esc(q.cloze.before)}<span class="blank">${"_".repeat(Math.max(3, q.cloze.answer.length))}</span>${esc(q.cloze.after)}`;
-    $("stBig").className = "qword long";
-  } else {
-    $("stBig").textContent = q.big;
-    $("stBig").className = "qword" + (q.big.length > 18 ? " long" : "");
-  }
+      : `맞히면 ${COINS[pay]}코인, 에너지 ${ENERGY[pay]}`);
+  drawPrompt(q);
   $("stSub").textContent = q.sub || "";
-  const inp = $("stInput");
-  inp.value = "";
   inp.placeholder = q.ask;
   inp.lang = q.lang;
   inp.disabled = false;
   $("stGo").disabled = $("stSkip").disabled = false;
-  $("stRes").hidden = true;
-  $("stNext").hidden = true;
-  $("stCard").hidden = false;
-  toTop($("stCard"));                       // 다음 문제도 맨 위에서 (문제 카드는 계속 보이는 채라 감시로는 안 잡힌다)
   inp.focus({ preventScroll: true });
 }
 
 async function submit(answer) {
-  if (busy || !cur) return;
+  if (busy || !cur || cur.retry) return;
   busy = true;
   $("stInput").disabled = $("stGo").disabled = $("stSkip").disabled = true;
 
   let res, body;
   try {
-    if (!(await cur.issued)) {
-      busy = false;
-      cur.issued = issue(cur.w.id);
-      showResult("bad", "인터넷 연결이 불안정해서 문제를 서버에 기록하지 못했어요. 잠시 뒤에 같은 답을 다시 보내 주세요.");
-      $("stInput").disabled = $("stGo").disabled = $("stSkip").disabled = false;
-      $("stNext").hidden = true;
-      return;
-    }
     const { data: { session } } = await db.auth.getSession();
     res = await fetch("/api/answer", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-      body: JSON.stringify({ word_id: cur.w.id, type: cur.type, answer, level: pickLevel < 0 ? null : pickLevel }),
+      body: JSON.stringify({ word_id: cur.w.id, type: cur.type, answer, typed: cur.keys > 0 }),
     });
     body = await res.json().catch(() => ({}));
   } catch {
@@ -197,8 +257,7 @@ async function submit(answer) {
   }
   busy = false;
 
-  if (res?.status === 409 && body.stale) {          // 다른 곳에서 단계가 바뀜 → 새 단계로 다시
-    cur.w.progress = [{ ...(cur.w.progress?.[0] ?? {}), srs_level: body.level }];
+  if (res?.status === 409 && body.stale) {          // 다른 창에서 같은 단어 문제를 새로 받았음 → 새로 받기
     ask();
     return;
   }
@@ -216,9 +275,12 @@ async function submit(answer) {
   }
   if (body.throttled) {                               // 코인 없이 채점만. 단계·날짜는 그대로라 다시 풀면 받는다
     stats.total++; stats.right++;
-    showResult("good", body.throttled === "fast"
-      ? "맞았어요! 다만 너무 빨리 답해서 이번엔 코인이 없어요. 다음에 다시 풀면 받을 수 있어요."
-      : "맞았어요! 코인은 1분에 20문제까지 받아요. 잠깐 쉬었다가 다시 풀면 받을 수 있어요.", body.answer);
+    showResult("good", {
+      fast: "맞았어요! 다만 너무 빨리 답해서 이번엔 코인이 없어요. 다음에 다시 풀면 받을 수 있어요.",
+      busy: "맞았어요! 코인은 1분에 20문제까지 받아요. 잠깐 쉬었다가 다시 풀면 받을 수 있어요.",
+      typed: "맞았어요! 다만 직접 입력한 답이 아니라 코인이 없어요. 붙여넣지 말고 직접 쳐서 다시 풀면 받을 수 있어요.",
+      pause: "맞았어요! 아주 빠르게 연달아 맞혀서 10분 동안 코인만 쉬어 가요. 연습은 그대로 돼요.",
+    }[body.throttled] ?? "맞았어요!", body.answer);
     return;
   }
 
@@ -258,6 +320,7 @@ function showResult(kind, text, answerText) {
 }
 
 function next() {
+  if (cur?.retry) return ask();                       // 문제를 못 불러왔을 때: 같은 단어 다시
   idx++;
   if (idx < queue.length) ask();
   else finish();
@@ -279,7 +342,7 @@ function finish(note) {
 
 function close() {
   $("study").hidden = true;
-  cur = null;
+  cur = null; askSeq++;
   window.dispatchEvent(new Event("hcu:sets-changed"));
 }
 
@@ -291,6 +354,9 @@ $("stCard").addEventListener("submit", e => {
   submit(v);
 });
 $("stSkip").addEventListener("click", () => submit(""));
+// 답은 직접 친다: 붙여넣기·끌어 놓기 막기, 진짜 타자(isTrusted)만 센다
+["paste", "drop"].forEach(ev => $("stInput").addEventListener(ev, e => { e.preventDefault(); tick("답은 직접 입력해 주세요."); }));
+["keydown", "input"].forEach(ev => $("stInput").addEventListener(ev, e => { if (e.isTrusted && cur && !cur.retry) cur.keys++; }));
 $("stNext").addEventListener("click", next);
 $("stClose").addEventListener("click", close);
 window.addEventListener("hcu:study", e => start(e.detail));
