@@ -27,7 +27,7 @@ export async function loadSets() {
 }
 
 /* 단어 한 줄: 단어 · 뜻 · 첫 표현 */
-const senseText = w => (w.senses || []).map(s => [s.pos, s.meaning].filter(Boolean).join(" ")).join(" · ");
+const senseText = w => (w.senses || []).map(s => [s.pos, s.meaning].filter(Boolean).join(" ")).join("; ");
 function wordRow(w) {
   const ph = (w.phrases || [])[0];
   return `<div class="wrow">

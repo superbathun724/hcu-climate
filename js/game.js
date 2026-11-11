@@ -13,7 +13,7 @@
    서버는 한 번에 받는 양에 넉넉한 상한만 둔다(잠그지 않음).
    ========================================================== */
 import { db, SUPABASE_URL, SUPABASE_KEY } from "./config.js";
-import { $, setBalance, getBalance, onProfile, tick, num1, shieldText } from "./ui.js";
+import { $, setBalance, getBalance, onProfile, tick, num1, shieldText, mis } from "./ui.js";
 import { currentEvent, liveShield } from "./event.js";
 import { SCENES, wallSVG, WALL_FOOT, WALL_RISE, infraSVG } from "./scenes.js";
 
@@ -32,7 +32,7 @@ function draw() {
   $("taps").textContent = taps.toLocaleString();
   $("left").textContent = (freeLeft + energy).toLocaleString();
   $("freeBar").style.width = Math.min(100, freeLeft / FREE_DAILY * 100) + "%";
-  $("leftTxt").textContent = `오늘 무료 ${freeLeft.toLocaleString()} · 에너지 ${energy.toLocaleString()}`;
+  $("leftTxt").innerHTML = mis(`오늘 무료 ${freeLeft.toLocaleString()}`, `에너지 ${energy.toLocaleString()}`);
 }
 /* 서버가 알려 준 남은 수에서, 그 뒤로 더 누른(아직 안 보낸) 만큼 뺀다. 무료부터 쓴다. */
 function setLeft(free, en, used) {
@@ -56,7 +56,7 @@ function drawShield() {
   if (cap) { cap.setAttribute("y", WALL_FOOT - h - 3); cap.setAttribute("fill", sh >= 50 ? "#8FE3A0" : cap.dataset.base); }
   $("hazard").style.opacity = hit ? 0.95 : 0.08 + 0.8 * (1 - Math.min(sh, 50) / 50);
   $("sceneName").textContent = region.name;
-  $("sceneShield").textContent = hit ? `재난 중 · 대비율 ${shieldText(real)}` : `대비율 ${shieldText(real)}${real >= 50 ? " · 버틸 수 있어요" : ""}`;
+  $("sceneShield").textContent = hit ? `재난 중, 대비율 ${shieldText(real)}` : `대비율 ${shieldText(real)}${real >= 50 ? ", 버틸 수 있어요" : ""}`;
   $("sceneTag").hidden = false;
 }
 

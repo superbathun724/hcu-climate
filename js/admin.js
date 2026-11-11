@@ -6,7 +6,7 @@
    이 파일을 고쳐도 학생은 아무것도 못 바꾸고, 비밀번호만 알아낸 사람도 못 바꾼다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, say, serverMsg, onProfile } from "./ui.js";
+import { $, esc, say, serverMsg, onProfile, mis } from "./ui.js";
 import { rowsToWords, nameFromFile, countDuplicates, MAX_ROWS, wordsToCSV } from "./csv.js";
 
 let sets = [];          // 지금 있는 단어장 [{id, name, hidden, count}]
@@ -30,7 +30,7 @@ const daysLeft = iso => Math.max(0, Math.ceil((new Date(iso).getTime() + 7 * 864
 function adminRow(s) {
   if (s.deleted_at) return `<div class="arow is-hidden" data-id="${s.id}">
     <div class="ahead">
-      <div class="m"><b>${esc(s.name)}</b> <span class="d">${s.count}단어 · 삭제 대기 · ${daysLeft(s.deleted_at)}일 뒤 완전히 지워져요</span></div>
+      <div class="m"><b>${esc(s.name)}</b> <span class="d">${mis(`${s.count}단어`, "삭제 대기", `${daysLeft(s.deleted_at)}일 뒤 완전히 지워져요`)}</span></div>
     </div>
     <div class="abtns">
       <button class="btn sm" data-act="restore">복구</button>
@@ -39,7 +39,7 @@ function adminRow(s) {
   </div>`;
   return `<div class="arow${s.hidden ? " is-hidden" : ""}" data-id="${s.id}">
     <div class="ahead">
-      <div class="m"><b>${esc(s.name)}</b> <span class="d">${s.count}단어${s.hidden ? " · 숨김" : ""}</span></div>
+      <div class="m"><b>${esc(s.name)}</b> <span class="d">${mis(`${s.count}단어`, s.hidden ? "숨김" : "")}</span></div>
     </div>
     <div class="abtns">
       <button class="btn ghost sm" data-act="rename">이름</button>
@@ -144,7 +144,7 @@ function describe() {
   const dup = countDuplicates(pending);
   const first = pending.slice(0, 3).map(w => w.word).join(", ");
   $("upInfo").innerHTML =
-    `${pending.length}줄 · 처음 단어: ${esc(first)}${pending.length > 3 ? " …" : ""}` +
+    `${pending.length}줄, 처음 단어: ${esc(first)}${pending.length > 3 ? " …" : ""}` +
     (dup ? `<br>같은 단어가 ${dup}번 겹쳐요. 뒤에 나온 줄을 써요.` : "") +
     (same ? `<br><b class="warn">「${esc(name)}」 단어장이 이미 있어요. 덮어쓰면 CSV에 없는 단어는 지워지고, 같은 단어는 학생 진도가 그대로 남아요.</b>` : "");
   $("upGo").textContent = same ? "덮어쓰기" : "올리기";
@@ -182,7 +182,7 @@ $("upGo").addEventListener("click", async () => {
 
   say($("upMsg"), data.created
     ? `「${data.name}」 단어장을 만들었어요. 단어 ${data.added}개.`
-    : `「${data.name}」 단어장을 덮어썼어요. 추가 ${data.added} · 바뀜 ${data.updated} · 삭제 ${data.removed}`, "good");
+    : `「${data.name}」 단어장을 덮어썼어요. 추가 ${data.added}, 바뀜 ${data.updated}, 삭제 ${data.removed}`, "good");
   resetUpload();
   await loadAdminSets();
   changed();
@@ -233,9 +233,9 @@ const REASON = {
 };
 const DETAIL = d => !d ? "" :
   d.reason === "regular-interval" ? `간격이 일정함 · 평균 ${d.mean_ms}ms · 흔들림 ${Math.round(d.cv * 100)}%` :
-  d.reason === "same-spot-fast" ? `같은 자리 · 초당 ${d.per_sec}번` :
+  d.reason === "same-spot-fast" ? `같은 자리, 초당 ${d.per_sec}번` :
   d.reason === "synthetic" ? "스크립트가 만든 누름" :
-  d.sent ? `${d.sent}번을 보냄(허용 ${d.allowed}) · ${d.strikes}회` :
+  d.sent ? `${d.sent}번을 보냄(허용 ${d.allowed}), ${d.strikes}회` :
   d.mean_s ? `최근 ${d.n}번 · 평균 ${d.mean_s}초 간격 · 흔들림 ${Math.round(d.cv * 100)}%` :
   d.taps_today ? `오늘 ${Number(d.taps_today).toLocaleString()}번(기준 ${Number(d.max).toLocaleString()}번)` : "";
 
@@ -244,8 +244,8 @@ async function loadLocks() {
   if (error) { $("lockList").innerHTML = `<p class="d">불러오지 못했어요.</p>`; return; }
   $("lockList").innerHTML = data.length ? data.map(u => `
     <div class="arow" data-u="${u.user_id}">
-      <div class="m"><b>${esc(u.email)}</b> <span class="d">${u.class_id ?? "?"}반 · ${esc(u.club_name ?? "")}</span></div>
-      <div class="d">${esc(REASON[u.reason] ?? u.reason)} · ${esc(DETAIL(u.detail))} · ${new Date(u.locked_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}${u.flags > 1 ? ` · 지금까지 ${u.flags}번` : ""}</div>
+      <div class="m"><b>${esc(u.email)}</b> <span class="d">${mis(`${u.class_id ?? "?"}반`, esc(u.club_name ?? ""))}</span></div>
+      <div class="d">${mis(esc(REASON[u.reason] ?? u.reason), esc(DETAIL(u.detail)), new Date(u.locked_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }), u.flags > 1 ? `지금까지 ${u.flags}번` : "")}</div>
       <div class="abtns"><button class="btn sm" data-unlock>잠금 풀기</button></div>
     </div>`).join("") : `<p class="d">잠긴 계정이 없어요.</p>`;
   const n = data.length;

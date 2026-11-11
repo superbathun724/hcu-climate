@@ -10,7 +10,7 @@
    재난 카드에는 그 지역의 실제 재난 사례와 효과가 있었던 대비를 출처와 함께 보여 준다(js/cases.js).
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, setBalance, getBalance, tick, onProfile, serverMsg, num1, shieldText } from "./ui.js";
+import { $, esc, setBalance, getBalance, tick, onProfile, serverMsg, num1, shieldText, mis } from "./ui.js";
 import { currentEvent, leftMs, liveShield, liveDrained, mmss } from "./event.js";
 import { CASES } from "./cases.js";
 import { announce } from "./infra.js";
@@ -19,32 +19,32 @@ let regions = [];     // [{id, name, hazard, shield, cls}]
 let myClass = 0;
 
 const SAFE = 50;
-const shieldLine = (v, cap = 150) => `대비율 ${shieldText(v)} · ` +
-  (v >= cap ? `가득(${num1(cap)}%) · 더 보내면 기금이 돼요` : v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
+const shieldLine = (v, cap = 150) => `대비율 ${shieldText(v)}, ` +
+  (v >= cap ? `가득(${num1(cap)}%), 더 보내면 기금이 돼요` : v >= SAFE ? "재난을 버틸 수 있어요" : `50%까지 ${num1(SAFE - v)}%`);
 const capOf = id => regions.find(x => x.id === id)?.cap ?? 150;
 const miniInfra = r => r.infra
-  ? `<div class="d infra-mini">시설 · 조기경보 ${r.infra.warning}단계 · 방파제 ${r.infra.wall}단계 · 대피소 ${r.infra.shelter}단계 · 기금 ${Math.floor(r.infra.fund).toLocaleString()}</div>` : "";
+  ? `<div class="d infra-mini">${mis(`조기경보 ${r.infra.warning}단계`, `방파제 ${r.infra.wall}단계`, `대피소 ${r.infra.shelter}단계`, `기금 ${Math.floor(r.infra.fund).toLocaleString()}`)}</div>` : "";
 
 /* 실제 사례 (재난 중인 카드에만) */
 function caseBox(id) {
   const c = CASES[id];
   if (!c) return "";
   return `<div class="case"><b>실제로 있었던 일</b> ${esc(c.event)}<br><b>효과가 있었던 대비</b> ${esc(c.measure)}
-    <div class="src">출처: ${c.src.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>`).join(" · ")}</div></div>`;
+    <div class="src">출처: ${c.src.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>`).join(", ")}</div></div>`;
 }
 
 function card(r, ev) {
   const mine = r.cls === myClass;
   const hit = ev && ev.region_id === r.id;
   const sh = hit ? liveShield(ev) : r.shield;
-  const tags = hit ? `<span class="tag red">재난 <b class="cd">${mmss(leftMs(ev))}</b> · 지원 ${ev.mult}배</span>` : "";
+  const tags = hit ? `<span class="tag red">재난 <b class="cd">${mmss(leftMs(ev))}</b>, 지원 ${ev.mult}배</span>` : "";
   const who = r.cls ? (mine ? `우리 ${r.team ? "팀" : "반"}이 돕는 곳` : `${esc(r.clsName)}${r.team ? " 팀" : ""}이 돕는 곳`) : "";
   return `<div class="row reg${mine ? " mine" : ""}${hit ? " emg" : ""}" data-r="${r.id}">
     <div class="rtop"><div class="t">${esc(r.name)}</div><div class="tags">${tags}</div></div>
-    <div class="d">${esc(r.hazard)}${who ? ` · <span class="${mine ? "who mine" : "who"}">${who}</span>` : ""}</div>
+    <div class="d">${mis(esc(r.hazard), who ? `<span class="${mine ? "who mine" : "who"}">${who}</span>` : "")}</div>
     <div class="shield"><div class="bar${sh > 100 ? " over" : ""}"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
       <div class="d sv">${shieldLine(sh, r.cap)}</div>
-      ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요 · <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}% · 끝날 때 50% 이상이면 방어 성공</div>` : ""}</div>
+      ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요: <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}%. 끝날 때 50% 이상이면 방어 성공이에요.</div>` : ""}</div>
     ${miniInfra(r)}
     ${hit ? caseBox(r.id) : ""}
     <div class="give"><button class="btn coin" data-amt="10">10</button><button class="btn coin" data-amt="50">50</button><button class="btn coin" data-amt="100">100</button></div>
@@ -140,7 +140,7 @@ $("sendList").addEventListener("click", async e => {
   setBalance(data.balance);
   const toFund = Math.floor(Number(data.to_fund) || 0);
   const toShield = amt * data.mult - toFund;
-  const fundTxt = toFund ? ` · 기금 +${toFund.toLocaleString()}` : "";
+  const fundTxt = toFund ? `, 기금 +${toFund.toLocaleString()}` : "";
   tick(data.mult > 1
     ? `${r.name}에 ${amt}코인 → 재난 중이라 ${data.mult}배! 대비율 +${num1(toShield / 20)}%${fundTxt}`
     : `${r.name}에 ${amt}코인을 보냈어요. 대비율 +${num1(toShield / 20)}%${fundTxt}`, "good");

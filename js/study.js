@@ -10,7 +10,7 @@
    답은 /api/answer 로 보내고, 맞았는지·코인·새 단계는 서버가 정해서 돌려준다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, setBalance, getBalance, coinPop, tick, kstToday } from "./ui.js";
+import { $, esc, setBalance, getBalance, coinPop, tick, kstToday, mis } from "./ui.js";
 import { typesForLevel, question, COINS, ENERGY, coinLevel } from "./quiz-core.js";
 
 const COUNTS = [10, 20, 30, 0];          // 0 = 전체
@@ -40,7 +40,7 @@ async function start(s) {
   $("stCard").hidden = true;
   $("stSetup").hidden = true;
   $("stBar").style.width = "0";
-  $("stHead").textContent = `${s.name} · 불러오는 중…`;
+  $("stHead").innerHTML = mis(esc(s.name), "불러오는 중…");
   setBalance(getBalance());                 // 공부 화면 코인 칩을 지금 값으로
 
   // progress 는 RLS 때문에 내 것만 붙어 온다
@@ -48,7 +48,7 @@ async function start(s) {
     .select("id, word, senses, synonyms, antonyms, phrases, sentences, progress(srs_level, last_correct_day, last_wrong_day)")
     .eq("set_id", s.id)
     .order("position");
-  if (error) { $("stHead").textContent = `${s.name} · 불러오지 못했어요`; return; }
+  if (error) { $("stHead").innerHTML = mis(esc(s.name), "불러오지 못했어요"); return; }
   words = data;
   setup();
 }
@@ -70,7 +70,7 @@ function setup() {
     <div class="t">몇 단계 문제로 풀까요?</div>
     <div class="picks lvpick">
       ${chip(-1, "내 단계대로", "단어마다 지금 단계", `${words.length}개`)}
-      ${COINS.map((c, i) => chip(i, `${i + 1}단계`, `${TYPE_NAME[i]} · ${c}코인`, `도전 ${challenge(i)}개`)).join("")}
+      ${COINS.map((c, i) => chip(i, `${i + 1}단계`, `${TYPE_NAME[i]}, ${c}코인`, `도전 ${challenge(i)}개`)).join("")}
     </div>
     <div class="t">몇 개 풀까요?</div>
     <div class="picks cnt">
@@ -140,14 +140,14 @@ function ask() {
   const q = question(w, type);
   // 문제를 낸 시각을 서버에 남긴다(너무 빠른 자동 풀이 거르기, sql/04_study.sql). 답하기 전에 끝나 있으면 된다.
   cur = { w, level, type, issued: issue(w.id) };
-  const mode = level > mine ? " · 도전" : level < mine ? " · 복습" : "";
+  const mode = level > mine ? "도전" : level < mine ? "복습" : "";
 
-  $("stHead").textContent = `${set.name} · ${idx + 1} / ${queue.length}`;
+  $("stHead").innerHTML = mis(esc(set.name), `<span class="num">${idx + 1} / ${queue.length}</span>`);
   $("stBar").style.width = (idx / queue.length * 100) + "%";
-  $("stType").textContent = `${level + 1}단계${mode} · ${q.label} · ` +
-    (doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요"
+  $("stType").innerHTML = mis(`${level + 1}단계${mode ? ` ${mode}` : ""}`, esc(q.label),
+    doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요"
       : wrongToday(w) ? "오늘 한 번 틀린 단어라 코인은 내일 받아요"
-      : `맞히면 ${COINS[coinLevel(level, type)]}코인 · 에너지 ${ENERGY[coinLevel(level, type)]}`);
+      : `맞히면 ${COINS[coinLevel(level, type)]}코인, 에너지 ${ENERGY[coinLevel(level, type)]}`);
 
   if (q.cloze) {
     $("stBig").innerHTML = `${esc(q.cloze.before)}<span class="blank">${"_".repeat(Math.max(3, q.cloze.answer.length))}</span>${esc(q.cloze.after)}`;
@@ -240,7 +240,7 @@ async function submit(answer) {
       ? `맞았어요! 이 단어는 오늘 코인을 이미 받았어요.`
       : body.after_wrong
       ? `맞았어요! 오늘 한 번 틀린 단어라 코인과 단계는 내일 다시 도전해요.`
-      : `맞았어요! +${body.coins}코인, 에너지 +${body.energy_gain ?? 0}(탭 ${body.energy_gain ?? 0}번) · ${moved}`, body.answer);
+      : `맞았어요! +${body.coins}코인, 에너지 +${body.energy_gain ?? 0}(탭 ${body.energy_gain ?? 0}번). ${moved}`, body.answer);
   } else {
     showResult("bad", `${answer ? "틀렸어요." : "괜찮아요."} ${moved}`, body.answer);
   }
@@ -268,7 +268,7 @@ function finish(note) {
   $("stHead").textContent = set ? set.name : "";
   $("stDone").innerHTML = note ? `<p class="note">${esc(note)}</p>` : `
     <div class="big">${stats.right} / ${stats.total}</div>
-    <p class="note">맞힌 단어 · 이번에 받은 코인 <b>+${stats.coins}</b> · 에너지 <b>+${stats.energy}</b></p>
+    <p class="note">맞힌 단어 수예요. ${mis(`이번에 받은 코인 <b>+${stats.coins}</b>`, `에너지 <b>+${stats.energy}</b>`)}</p>
     <div class="qbtns"><button class="btn ghost" id="stQuit">닫기</button><button class="btn coin" id="stAgain">다시 고르기</button></div>`;
   $("stDone").hidden = false;
   $("stAgain")?.addEventListener("click", setup);

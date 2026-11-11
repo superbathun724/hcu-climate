@@ -238,7 +238,9 @@ async function onSignedIn() {
                     className: data.classes?.name ?? `${data.class_id}반`,
                     regionId: data.classes?.region_id ?? null, isAdmin: admin === true, adminOk };
   window.hcuProfile = profile;
-  $("chipTxt").textContent = `${profile.className} · ${profile.clubName}`;
+  const chip = $("chipTxt");
+  chip.replaceChildren(...[profile.className, profile.clubName].map(t => { const s = document.createElement("span"); s.className = "mi"; s.textContent = t; return s; }));
+  chip.className = "mis";
   $("adminLink").hidden = !profile.isAdmin;
   $("gate").classList.remove("on");
   say("");

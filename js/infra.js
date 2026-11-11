@@ -5,7 +5,7 @@
    숫자(효과·값)는 서버가 정하고 여기서는 보여 주기만 한다. 효과 문구만 서버 규칙을 그대로 옮겨 적었다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, tick, onProfile, serverMsg, num1 } from "./ui.js";
+import { $, esc, tick, onProfile, serverMsg, num1, mis } from "./ui.js";
 
 let me = null;
 let state = null;
@@ -24,10 +24,10 @@ function draw() {
     const mine = s.my_vote === it.key, maxed = it.level >= it.max;
     const pct = maxed ? 100 : Math.min(100, Number(s.fund) / it.cost * 100);
     return `<div class="fac${mine ? " voted" : ""}">
-      <div class="fh"><b>${esc(it.name)}</b><span class="flv">${it.level} / ${it.max}단계${mine ? " · 내 표" : ""}</span></div>
-      <div class="d">${EFFECT[it.key]?.(it.level) ?? ""}${maxed ? " · 최고 단계" : ` → 다음 단계 ${EFFECT[it.key]?.(it.level + 1).replace(/^.* /, "") ?? ""}`}</div>
+      <div class="fh"><b>${esc(it.name)}</b><span class="flv">${it.level} / ${it.max}단계${mine ? ", 내 표" : ""}</span></div>
+      <div class="d">${EFFECT[it.key]?.(it.level) ?? ""}${maxed ? ", 최고 단계" : `, 다음 단계 ${EFFECT[it.key]?.(it.level + 1).replace(/^.* /, "") ?? ""}`}</div>
       ${maxed ? "" : `<div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="d">기금 ${Math.floor(Number(s.fund)).toLocaleString()} / ${it.cost.toLocaleString()} · 표 ${it.votes}</div>`}
+      <div class="d">${mis(`기금 ${Math.floor(Number(s.fund)).toLocaleString()} / ${it.cost.toLocaleString()}`, `표 ${it.votes}`)}</div>`}
       ${s.can_vote && !maxed ? `<button class="btn ${mine ? "" : "ghost"} sm" data-vote="${it.key}">${mine ? "투표 취소" : "이걸 짓자"}</button>` : ""}
     </div>`;
   }).join("");

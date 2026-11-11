@@ -5,7 +5,7 @@
    관리자에게는 글마다 답변 칸과 숨기기 버튼이 붙는다. 그것도 서버가 관리자인지 다시 확인한다.
    ========================================================== */
 import { db } from "./config.js";
-import { $, esc, say, serverMsg, onProfile, tick } from "./ui.js";
+import { $, esc, say, serverMsg, onProfile, tick, mis } from "./ui.js";
 
 let sort = "top";
 let admin = false;
@@ -45,7 +45,7 @@ function post(p) {
     <button class="up${p.voted ? " on" : ""}" data-act="vote" ${canVote ? "" : "disabled"} aria-label="공감">
       ▲<span>${p.votes}</span><small>${p.mine ? "내 글" : "공감"}</small></button>
     <div class="b"><div class="txt">${esc(p.body)}</div>
-      <div class="meta">익명 · ${ago(p.created_at)}${p.answer ? " · 답변 완료" : ""}${status ? ` · <b class="st">${status}</b>` : ""}</div>
+      <div class="meta">${mis("익명", ago(p.created_at), p.answer ? "답변 완료" : "", status ? `<b class="st">${status}</b>` : "")}</div>
       ${p.mine && !p.approved && !p.hidden ? `<div class="wait">관리자가 확인하면 모두에게 보여요.</div>` : ""}
       ${p.answer ? `<div class="ans"><b>학생회 답변</b><div class="txt">${esc(p.answer)}</div></div>` : ""}
       ${adminBox}

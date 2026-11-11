@@ -189,4 +189,4 @@ export const meaningAnswer = (word) =>
 
 /** "noticeable 눈에 띄는 · pronounced 두드러진" */
 export const relatedAnswer = (list) =>
-  (list ?? []).map(o => o.meaning ? `${o.word} ${o.meaning}` : o.word).join("  ·  ");
+  (list ?? []).map(o => o.meaning ? `${o.word} ${o.meaning}` : o.word).join(";  ");

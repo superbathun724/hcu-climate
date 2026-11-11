@@ -8,6 +8,10 @@ export const $ = id => document.getElementById(id);
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, ch =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 
+/* 짧은 정보 조각을 가운뎃점으로 잇지 않고 칸으로 늘어놓는다(styles.css 의 .mis/.mi).
+   조각은 이미 안전한 HTML 이어야 한다(사용자 글자는 부르는 쪽에서 esc). 빈 조각은 뺀다. */
+export const mis = (...parts) => `<span class="mis">${parts.filter(Boolean).map(p => `<span class="mi">${p}</span>`).join("")}</span>`;
+
 /** 안내 상자(.msg)에 글을 띄운다. 빈 글이면 숨긴다. */
 export function say(el, text, kind = "bad") {
   el.textContent = text;
