@@ -11,15 +11,17 @@
   --color-error: oklch(52% 0.19 27); --color-success: oklch(50% 0.12 150);
   --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
   --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
-  --color-paper: oklch(97% 0.012 95); --color-paper-2: oklch(94.5% 0.018 95); --color-paper-3: oklch(91% 0.022 95);
-  --color-ink: oklch(20% 0.014 255); --color-ink-2: oklch(29% 0.014 255); --color-muted: oklch(47% 0.014 255);
-  --color-rule: oklch(87% 0.016 95);
-  --color-accent: oklch(87% 0.175 96); --color-accent-deep: oklch(72% 0.16 92); --color-accent-ink: oklch(20% 0.014 255);
-  --color-accent-2: oklch(50% 0.17 250); --color-accent-3: oklch(70% 0.2 22);
-  --color-mint: oklch(82% 0.15 152); --color-mint-deep: oklch(48% 0.12 155); --color-focus: oklch(50% 0.17 250);
-  --color-card: oklch(98.8% 0.007 95); --color-edge: oklch(83% 0.04 88); --color-fringe: oklch(99.2% 0.006 95);
+  /* 색: 이전 학교 파란색 테마로 되돌림 (파란 바탕 위 흰 종이 한 장, 금색 코인, 초록 막대, 빨간 경보) */
+  --color-page: oklch(42% 0.14 257);
+  --color-paper: oklch(98.6% 0.004 250); --color-paper-2: oklch(94.6% 0.016 250); --color-paper-3: oklch(90.5% 0.022 250);
+  --color-ink: oklch(30% 0.05 245); --color-ink-2: oklch(36% 0.045 245); --color-muted: oklch(48% 0.035 245);
+  --color-rule: oklch(90% 0.014 250);
+  --color-primary: oklch(42% 0.14 257); --color-primary-deep: oklch(31% 0.11 258); --color-on-primary: oklch(99% 0.003 250);
+  --color-accent: oklch(82% 0.15 78); --color-accent-deep: oklch(64% 0.13 68); --color-accent-ink: oklch(30% 0.05 245);
+  --color-accent-2: oklch(42% 0.14 257); --color-accent-3: oklch(52% 0.18 28);
+  --color-mint: oklch(70% 0.13 150); --color-mint-deep: oklch(52% 0.12 150); --color-focus: oklch(50% 0.17 257);
+  --color-card: oklch(99.6% 0.002 250); --color-edge: oklch(86% 0.025 250); --color-fringe: oklch(99.6% 0.002 250);
   --color-kraft: oklch(63% 0.085 62); --color-sand: oklch(77% 0.1 76); --color-sugar: oklch(89% 0.035 236);
-  --color-hill-1: oklch(94.5% 0.03 118); --color-hill-2: oklch(91.5% 0.045 135); --color-leaf: oklch(64% 0.15 150);
   /* 글꼴은 사용자 지시가 테마보다 앞선다: 단어는 클래식 세리프(Castoro), 점수·시간은 고정폭(Azeret Mono),
      한국어 본문은 Pretendard. Hum 의 Chillax 와 "세리프 금지"는 이 프로젝트에서 쓰지 않는다. */
   --font-display: "Castoro", "Iowan Old Style", "Palatino Linotype", Palatino, ui-serif, serif;
@@ -27,8 +29,8 @@
   --font-figure: "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --font-outlier: var(--font-figure);
   --radius-card: 24px; --radius-stock: 16px; --radius-input: 14px; --radius-pill: 999px; --rule-hair: 1px;
-  --shadow-card: 0 1px 2px oklch(20% 0.014 255 / 0.06), 0 12px 28px -14px oklch(20% 0.014 255 / 0.22);
-  --shadow-paper: drop-shadow(0 0 0.6px oklch(20% 0.014 255 / 0.32)) drop-shadow(1.5px 2.5px 1.5px oklch(20% 0.014 255 / 0.1)) drop-shadow(6px 14px 16px oklch(20% 0.014 255 / 0.13));
+  --shadow-card: 0 1px 2px oklch(28% 0.06 250 / 0.06), 0 12px 28px -14px oklch(28% 0.06 250 / 0.22);
+  --shadow-paper: drop-shadow(0 0 0.6px oklch(28% 0.06 250 / 0.32)) drop-shadow(1.5px 2.5px 1.5px oklch(28% 0.06 250 / 0.1)) drop-shadow(6px 14px 16px oklch(28% 0.06 250 / 0.13));
   --tracking-display: -0.03em; --display-weight: 600;
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -45,19 +47,19 @@
   --haze-rain: oklch(92% 0.02 240 / 0.35); --haze-storm: oklch(36% 0.025 250); --haze-storm-mid: oklch(42% 0.025 250 / 0.75);
   --haze-storm-low: oklch(48% 0.02 250 / 0.15); --haze-flood-top: oklch(40% 0.015 240 / 0.75); --haze-flood-mid: oklch(45% 0.015 240 / 0.2);
   --haze-mud: oklch(50% 0.06 70 / 0.55); --haze-sea-mid: oklch(45% 0.1 240 / 0.25); --haze-sea-low: oklch(38% 0.1 245 / 0.6);
-  --color-scrim: oklch(20% 0.014 255 / 0.62); --color-scrim-hit: oklch(42% 0.15 27 / 0.88); --color-on-scrim: oklch(98% 0.006 95);
+  --color-scrim: oklch(25% 0.05 250 / 0.62); --color-scrim-hit: oklch(42% 0.15 27 / 0.88); --color-on-scrim: oklch(98% 0.006 95);
 
   /* 코인 그림 */
   --coin-face: oklch(88% 0.13 88); --coin-rim: oklch(58% 0.12 70); --coin-ring: oklch(70% 0.13 78); --coin-shine: oklch(97% 0.05 95);
 
   /* 상태 (코랄 = 재난 한 곳, 민트 = 성장) */
   --color-alert: var(--color-accent-3);
-  --color-alert-ink: oklch(42% 0.15 27);
+  --color-alert-ink: oklch(45% 0.16 28);
   --color-alert-wash: oklch(95% 0.03 27);
   --color-good-ink: var(--color-mint-deep);
   --color-good-wash: oklch(95% 0.04 152);
-  --color-pending-wash: oklch(96% 0.045 95);
-  --color-pear-wash: oklch(95% 0.07 96);
+  --color-pending-wash: oklch(96.5% 0.04 85);
+  --color-pear-wash: oklch(95% 0.05 85);
   --color-coin-ink: oklch(42% 0.09 75);
 
   --radius-tile: 12px;

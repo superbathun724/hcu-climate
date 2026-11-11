@@ -127,7 +127,7 @@ revoke all on public.players, public.sends, public.disasters, public.flags from 
 -- 탭: 한 번에 1코인, 줄지 않는다. 대신 누를 수 있는 횟수가 정해져 있다.
 --   하루 무료 tap_free_daily() 번 + 단어를 맞혀 모은 에너지 1 = 탭 1번 (에너지는 날이 바뀌어도 남는다)
 --   단어 정답 하나의 에너지 = word_energy(단계) (04_study.sql). 1단계 5 … 6단계 40
-create or replace function public.tap_free_daily() returns integer language sql immutable as $$ select 1000 $$;
+create or replace function public.tap_free_daily() returns integer language sql immutable as $$ select 2000 $$;
 alter table public.players add column if not exists energy integer not null default 0 check (energy >= 0);
 -- 예전 "구간마다 절반" 규칙의 함수. 다른 곳에서 부르지 않게 지운다.
 drop function if exists public.tap_coins(integer, integer);

@@ -6,7 +6,7 @@
 
    누를 때마다 서버에 보내지 않는다. 2초마다 "몇 번 눌렀다"를 모아 보내고(submit_taps),
    코인은 서버가 계산한 값으로 맞춘다. 화면의 숫자는 그 사이를 잇는 어림값일 뿐이다.
-   한 번에 1코인. 하루 무료 1,000번 + 단어를 맞혀 모은 에너지만큼 누를 수 있다(sql/03_game.sql, 04_study.sql).
+   한 번에 1코인. 하루 무료 2,000번 + 단어를 맞혀 모은 에너지만큼 누를 수 있다(sql/03_game.sql, 04_study.sql).
 
    매크로·속도 검사로 잠그지 않는다. 누를 수 있는 횟수가 무료 탭 + 에너지로 정해져 있어서
    빨리 누르든 자동 클릭을 쓰든 더 벌 수 없다. 스크립트가 만든 가짜 누름(isTrusted=false)만 조용히 세지 않는다.
@@ -18,7 +18,7 @@ import { currentEvent, liveShield } from "./event.js";
 import { SCENES, wallSVG, WALL_FOOT, WALL_RISE, infraSVG } from "./scenes.js";
 
 const FLUSH_MS = 2000;
-const FREE_DAILY = 1000;           // 하루 무료 탭 (sql tap_free_daily 와 같게. 막대 그림에만 쓴다 — 실제 수는 서버 값)
+const FREE_DAILY = 2000;           // 하루 무료 탭 (sql tap_free_daily 와 같게. 막대 그림에만 쓴다 — 실제 수는 서버 값)
 
 let ready = false;    // 서버에서 오늘 상태를 받기 전에는 누르지 않는다
 let taps = 0;         // 오늘 누른 횟수 (보내지 않은 것 포함)
@@ -229,7 +229,7 @@ document.addEventListener("visibilitychange", () => {
   else if (ready) load();                         // 돌아오면(자정을 넘겼을 수도) 서버 값으로 다시
 });
 /* 자정이 지나면 누른 횟수·무료 탭을 서버 값으로 다시. 켜 둔 채 밤을 넘긴 화면도 */
-window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 무료 탭 1,000번이 다시 채워졌어요."); } });
+window.addEventListener("hcu:newday", () => { if (window.hcuProfile) { load(); tick("새 날이에요. 무료 탭 2,000번이 다시 채워졌어요."); } });
 window.addEventListener("pagehide", flushOnLeave);
 
 db.auth.onAuthStateChange((_e, session) => { token = session?.access_token ?? ""; });
