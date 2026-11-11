@@ -16,7 +16,6 @@ const EFFECT = {
   wall:    l => `대비율 상한 ${150 + 20 * l}%`,
   shelter: l => `방어 성공 보너스 1인당 ${10 + 5 * l}점`,
 };
-const ICON = { warning: "📡", wall: "🧱", shelter: "🏠" };
 
 function draw() {
   if (!state) return;
@@ -25,15 +24,15 @@ function draw() {
     const mine = s.my_vote === it.key, maxed = it.level >= it.max;
     const pct = maxed ? 100 : Math.min(100, Number(s.fund) / it.cost * 100);
     return `<div class="fac${mine ? " voted" : ""}">
-      <div class="fh"><span class="fi">${ICON[it.key] ?? ""}</span><b>${esc(it.name)}</b><span class="flv">${it.level} / ${it.max}단계</span></div>
+      <div class="fh"><b>${esc(it.name)}</b><span class="flv">${it.level} / ${it.max}단계${mine ? " · 내 표" : ""}</span></div>
       <div class="d">${EFFECT[it.key]?.(it.level) ?? ""}${maxed ? " · 최고 단계" : ` → 다음 단계 ${EFFECT[it.key]?.(it.level + 1).replace(/^.* /, "") ?? ""}`}</div>
       ${maxed ? "" : `<div class="bar"><i style="width:${pct}%"></i></div>
       <div class="d">기금 ${Math.floor(Number(s.fund)).toLocaleString()} / ${it.cost.toLocaleString()} · 표 ${it.votes}</div>`}
-      ${s.can_vote && !maxed ? `<button class="btn ${mine ? "" : "ghost"} sm" data-vote="${it.key}">${mine ? "내 표 ✓ (다시 누르면 취소)" : "이걸 짓자"}</button>` : ""}
+      ${s.can_vote && !maxed ? `<button class="btn ${mine ? "" : "ghost"} sm" data-vote="${it.key}">${mine ? "투표 취소" : "이걸 짓자"}</button>` : ""}
     </div>`;
   }).join("");
   $("infraBox").innerHTML = `
-    <div class="rtop"><div class="t">${esc(name)} 시설</div><div class="tags"><span class="tag blue">기금 ${Math.floor(Number(s.fund)).toLocaleString()}</span></div></div>
+    <div class="rtop"><div class="t">${esc(name)} 시설</div><b class="fund">기금 ${Math.floor(Number(s.fund)).toLocaleString()}</b></div>
     <p class="d">대비율이 가득(${num1(s.cap)}%) 찬 뒤에 보낸 코인은 이 지역 기금이 돼요. ${s.can_vote
       ? `우리 ${me?.className === "교사" ? "팀" : "반"}이 투표해서, 표가 가장 많은 시설이 ${s.need_votes}표 이상이고 기금이 모이면 저절로 지어져요. 지을 때마다 순위 점수도 받아요.`
       : "이 지역을 맡은 반이 투표해서 지어요."}</p>

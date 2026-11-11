@@ -37,11 +37,11 @@ function card(r, ev) {
   const mine = r.cls === myClass;
   const hit = ev && ev.region_id === r.id;
   const sh = hit ? liveShield(ev) : r.shield;
-  const tags = (hit ? `<span class="tag red">재난 · <b class="cd">${mmss(leftMs(ev))}</b> 남음</span><span class="tag x2">지원 ${ev.mult}배</span>` : "") +
-    (r.cls ? `<span class="tag ${mine ? "blue" : "soft"}">${mine ? `우리 ${r.team ? "팀" : "반"}이 돕는 곳` : `${esc(r.clsName)}${r.team ? " 팀" : ""}이 돕는 곳`}</span>` : "");
+  const tags = hit ? `<span class="tag red">재난 <b class="cd">${mmss(leftMs(ev))}</b> · 지원 ${ev.mult}배</span>` : "";
+  const who = r.cls ? (mine ? `우리 ${r.team ? "팀" : "반"}이 돕는 곳` : `${esc(r.clsName)}${r.team ? " 팀" : ""}이 돕는 곳`) : "";
   return `<div class="row reg${mine ? " mine" : ""}${hit ? " emg" : ""}" data-r="${r.id}">
     <div class="rtop"><div class="t">${esc(r.name)}</div><div class="tags">${tags}</div></div>
-    <div class="d">${esc(r.hazard)}</div>
+    <div class="d">${esc(r.hazard)}${who ? ` · <span class="${mine ? "who mine" : "who"}">${who}</span>` : ""}</div>
     <div class="shield"><div class="bar${sh > 100 ? " over" : ""}"><i style="width:${Math.min(100, sh)}%"></i><span class="safe"></span></div>
       <div class="d sv">${shieldLine(sh, r.cap)}</div>
       ${hit ? `<div class="d drain">재난 대응에 대비율이 쓰이고 있어요 · <b class="dr">−${num1(liveDrained(ev))}</b> / −${num1(ev.drain)}% · 끝날 때 50% 이상이면 방어 성공</div>` : ""}</div>

@@ -11,9 +11,10 @@
   --sky:#7FC4E8; --smog:#8A7A5A; --sea:#1F5F8B; --brand:#0F4C9C;
   --ink:#16232E; --paper:#F8FAFC; --mist:#E4ECF5; --coin:#F2B134; --alert:#E05A47; --leaf:#4E9F5C;
   --sub:#5b6b78; --line:#cfd9e3;
-  /* 한글은 Pretendard. 영어 제목·버튼만 Poppins(기기에 있으면). */
+  /* 글꼴은 Pretendard 하나. 제목은 굵기(800)와 좁은 자간으로만 구분한다.
+     (예전에는 Poppins 를 적어 두었지만 불러오지 않아 실제로는 쓰이지 않았다) */
   --kr:"Pretendard Variable","Pretendard",-apple-system,BlinkMacSystemFont,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
-  --head:"Poppins",var(--kr);
+  --head:var(--kr);
   --gut:16px;            /* 화면 좌우 여백 */
 }
 html{font-size:16px}
@@ -26,6 +27,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 h3{font-size:.875rem;margin:16px 0 8px;color:var(--sub)}
 a{color:var(--brand)}
 [hidden]{display:none !important}
+/* 키보드로 움직일 때만 보이는 포커스 테두리 (마우스·터치로 누를 때는 안 보임) */
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.btn:focus-visible,.pick:focus-visible,nav button:focus-visible,.seg button:focus-visible{outline-offset:1px}
+#scene:focus-visible{outline-offset:-3px}
 
 /* ---------- 상단바 ---------- */
 header{display:flex;align-items:center;justify-content:space-between;padding:12px var(--gut) 8px;gap:8px}
@@ -41,7 +46,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 nav{display:flex;margin:10px var(--gut) 0;background:var(--mist);border-radius:12px;padding:3px}
 nav button{flex:1;border:0;background:transparent;padding:8px 2px;border-radius:9px;font-weight:700;font-size:.85rem;color:var(--sub);cursor:pointer;white-space:nowrap}
 nav button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
-nav button.alert::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alert);margin-left:4px;vertical-align:middle;animation:blip 1.1s infinite}
+nav button.alert::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alert);margin-left:4px;vertical-align:middle}
 @keyframes blip{50%{opacity:.2}}
 #sceneSvg .blink{animation:blip 1.2s infinite}
 #ticker{margin:9px var(--gut) 0;font-size:.8rem;color:#3c4d5a;line-height:1.35;min-height:1.1em}
@@ -86,26 +91,31 @@ section.on{display:block}
 .meter small{display:block;color:var(--sub);font-size:.75rem}
 .bar{position:relative;height:6px;background:var(--mist);border-radius:3px;margin:6px 0 4px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--leaf);width:0;transition:width .3s}
-.band{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.band div{background:#fff;border-radius:10px;padding:7px 4px;text-align:center}
+.band{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--mist);border:1px solid var(--mist);border-radius:12px;overflow:hidden}
+.band div{background:#fff;padding:7px 4px;text-align:center}
 .band span{display:block;font-size:.7rem;color:var(--sub)}
 .band b{font-size:.95rem}
 .band .now{outline:2px solid var(--coin)}
 .band.energy{grid-template-columns:repeat(3,minmax(0,1fr))}
 .row.infra{margin-bottom:10px}
-.facs{display:grid;gap:8px;margin-top:8px}
-.fac{background:#f6f9fc;border-radius:12px;padding:10px;border:2px solid transparent}
-.fac.voted{border-color:var(--blue,#0F4C9C)}
-.fac .fh{display:flex;align-items:center;gap:6px}
-.fac .fi{font-size:1.05rem}
+.facs{display:grid;margin-top:6px}
+.fac{padding:10px 0;border-top:1px solid var(--mist)}
+.fac .fh{display:flex;align-items:baseline;gap:6px}
 .fac .fh b{flex:1;min-width:0}
+.fac.voted .fh b{color:var(--brand)}
 .fac .flv{margin-left:auto;font-size:.75rem;color:var(--sub);white-space:nowrap}
 .fac .bar{margin:6px 0 2px}
 .fac .btn{margin-top:6px;width:100%}
 .infra-mini{margin-top:4px}
-@media (min-width:720px){.facs{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.band.energy small{display:block;font-size:.72rem;color:#b07a00;font-weight:600}
-.case{margin-top:8px;padding:8px 10px;border-radius:10px;background:#fff6f4;font-size:.8rem;line-height:1.5;color:#4a3a36}
+@media (min-width:720px){
+  .facs{grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--mist)}
+  .fac{border-top:0;padding:10px 14px}
+  .fac:first-child{padding-left:0}
+  .fac + .fac{border-left:1px solid var(--mist)}
+  .fac:last-child{padding-right:0}
+}
+.band.energy small{display:block;font-size:.72rem;color:#8a5a00;font-weight:600}
+.case{margin-top:8px;padding-top:8px;border-top:1px dashed #f0b9ae;font-size:.8rem;line-height:1.5;color:#4a3a36}
 .case b{color:#a8382a;margin-right:4px}
 .case .src{margin-top:4px;font-size:.72rem;color:var(--sub)}
 .case .src a{color:inherit}
@@ -137,11 +147,12 @@ section.on{display:block}
 .frow input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px}
 
 /* ---------- 단어 ---------- */
-.lv{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:6px}
-.lv div{background:#fff;border-radius:10px;padding:6px 2px;text-align:center}
+.lv{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--mist);border:1px solid var(--mist);border-radius:12px;overflow:hidden;margin-bottom:6px}
+.lv div{background:#fff;padding:6px 2px;text-align:center}
 .lv span{display:block;font-size:.66rem;color:var(--sub)}
 .lv b{display:block;font-size:1rem;color:#8a5a00}
-.lv small{font-size:.66rem;color:var(--sub)}
+.lv small{display:block;font-size:.66rem;color:var(--sub)}
+.lv small.en{color:#8a5a00;font-weight:600;font-variant-numeric:tabular-nums}
 
 /* 단어장 보기·공부: 탭 위를 덮는 판 */
 .panel{position:absolute;inset:0;background:var(--paper);padding:16px var(--gut);z-index:5;display:flex;flex-direction:column;gap:12px;overflow:auto}
@@ -174,20 +185,22 @@ section.on{display:block}
 .pick span{font-size:.75rem;font-weight:700;color:var(--brand)}
 .pick.on{border-color:var(--brand);background:#EDF3FB}
 .pick:disabled{opacity:.4;cursor:default}
-.wlist{display:flex;flex-direction:column;gap:6px;padding-bottom:16px}
-.wrow{background:#fff;border-radius:12px;padding:10px 12px}
+.wlist{display:flex;flex-direction:column;background:#fff;border-radius:14px;overflow:hidden;margin-bottom:16px}
+.wrow{padding:10px 12px;border-top:1px solid var(--mist)}
+.wrow:first-child{border-top:0}
 .wrow .w{font-family:var(--head);font-weight:800;font-size:1rem}
 .wrow .s{font-size:.85rem;margin-top:2px}
 .wrow .p{font-size:.78rem;color:var(--sub);margin-top:3px}
 
 /* ---------- 지원 ---------- */
-.row.emg{background:#FDEDEA;outline:2px solid var(--alert);animation:pulse 1.6s infinite}
-@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(224,90,71,.18)}}
+.row.emg{background:#FDEDEA;outline:2px solid var(--alert)}
 .tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
 .tag.red{background:var(--alert);color:#fff}
 .tag.x2{background:var(--coin);color:#3d2a00}
+.who.mine{color:var(--brand);font-weight:700}
+.rtop .fund{font-size:.85rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 .d.drain{color:#9b2c1f;font-weight:600}
-.bar.over i{background:linear-gradient(90deg,var(--sea),#2FB37A)}
+.bar.over i{background:var(--leaf)}
 .row.reg{display:block}
 .row.mine{outline:2px solid var(--brand)}
 .rtop{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -212,13 +225,16 @@ section.on{display:block}
 .round{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--brand);color:#fff;border-radius:12px;padding:10px 14px;margin:2px 0 6px}
 .round span{font-weight:800;font-size:.95rem}
 .round b{font-variant-numeric:tabular-nums;font-size:.9rem;background:rgba(255,255,255,.16);border-radius:8px;padding:3px 8px;white-space:nowrap}
-.rk{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:6px}
+#rankList:not(:empty){background:#fff;border-radius:14px;overflow:hidden}
+.rk{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--mist)}
+.rk:first-child{border-top:0}
 .rk .n{width:22px;font-weight:800;color:var(--sub);text-align:right}
 .rk .m{flex:1;min-width:0}
 .rk .t{font-weight:700;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rk .d{font-size:.75rem;color:var(--sub)}
 .rk .v{font-weight:800;font-variant-numeric:tabular-nums}
-.rk.me{outline:2px solid var(--coin)}
+.rk.me{background:#FFF6DD}
+.rk.me .n{color:#8a5a00}
 
 /* ---------- 건의함 ---------- */
 .row.write{display:block}
