@@ -336,6 +336,9 @@ code { display: block; margin: var(--space-xs) 0; padding: var(--space-xs); bord
 #upInfo { margin-top: var(--space-xs); }
 #upInfo .warn { color: var(--color-alert-ink); font-weight: 700; }
 .arow { padding: var(--space-sm) 0; box-shadow: inset 0 var(--rule-hair) 0 0 var(--color-rule); }
+.arow.warn .m b { color: var(--color-alert-ink); }
+#auditCard .frow { flex-wrap: wrap; align-items: center; }
+#auditCard #auQuery { flex: 1 1 14rem; min-width: 0; }
 .arow:first-child { box-shadow: none; }
 .arow.is-hidden b { color: var(--color-muted); }
 .abtns, .aedit { display: flex; gap: var(--space-xs); margin-top: var(--space-xs); flex-wrap: wrap; }

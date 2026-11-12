@@ -108,6 +108,23 @@ begin
 end;
 $$;
 
+-- 관리자 함수 입구. 통과 못 하면 기록(08_audit.sql 의 audit_write)을 남기고 false.
+-- require_admin 처럼 오류를 내면 기록까지 같이 취소되므로(트랜잭션), 오류 대신 false 를 돌려주고
+-- 부른 함수가 조용히 끝난다. 학생이 관리자 함수를 두드린 흔적이 지워지지 않게.
+create or replace function public.admin_gate(p_fn text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v_admin boolean := public.is_admin(); v_mfa boolean := public.admin_ok();
+begin
+  if to_regprocedure('public.audit_write(uuid,text,jsonb)') is not null then
+    execute 'select public.audit_write($1, $2, $3)'
+      using auth.uid(), case when v_admin and v_mfa then 'admin_call' else 'admin_denied' end,
+            jsonb_build_object('fn', p_fn, 'admin', v_admin, 'mfa', v_mfa);
+  end if;
+  return v_admin and v_mfa;
+end;
+$$;
+revoke execute on function public.admin_gate(text) from public, anon, authenticated;
+
 -- 이름 다듬기: 앞뒤 공백 제거, 비었거나 너무 길면 거부
 create or replace function public.clean_set_name(p_name text)
 returns text language plpgsql immutable as $$
@@ -140,7 +157,7 @@ declare
   v_changed integer;
   v_removed integer;
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_upload_set') then return jsonb_build_object('error', '관리자만, 2단계 인증을 한 뒤에 할 수 있어요.'); end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
 
   if jsonb_typeof(p_words) is distinct from 'array' then
     raise exception '단어 목록이 비어 있어요.' using errcode = 'P0001';
@@ -218,7 +235,7 @@ returns void
 language plpgsql security definer set search_path = public as $$
 declare v_name text := public.clean_set_name(p_name);
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_rename_set') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   if exists (select 1 from public.word_sets where name = v_name and id <> p_set) then
     raise exception '같은 이름의 단어장이 이미 있어요.' using errcode = 'P0001';
   end if;
@@ -232,7 +249,7 @@ create or replace function public.admin_set_hidden(p_set bigint, p_hidden boolea
 returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_set_hidden') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   update public.word_sets set hidden = coalesce(p_hidden, false), updated_at = now() where id = p_set;
   if not found then raise exception '단어장을 찾을 수 없어요.' using errcode = 'P0001'; end if;
 end;
@@ -251,7 +268,7 @@ create or replace function public.admin_delete_set(p_set bigint)
 returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_delete_set') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   perform public.purge_deleted_sets();
   update public.word_sets set deleted_at = coalesce(deleted_at, now()), updated_at = now() where id = p_set;
   if not found then raise exception '단어장을 찾을 수 없어요.' using errcode = 'P0001'; end if;
@@ -262,7 +279,7 @@ create or replace function public.admin_restore_set(p_set bigint)
 returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_restore_set') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   perform public.purge_deleted_sets();
   update public.word_sets set deleted_at = null, updated_at = now() where id = p_set and deleted_at is not null;
   if not found then raise exception '복구할 단어장을 찾을 수 없어요(7일이 지났을 수 있어요).' using errcode = 'P0001'; end if;
@@ -282,9 +299,9 @@ revoke execute on function public.admin_restore_set(bigint)         from public,
 revoke execute on function public.purge_deleted_sets()              from public, anon, authenticated;
 -- 관리자 내려받기 (모든 열). 학생 계정은 유의어·반의어·예문 열을 못 읽으므로 이 함수로만.
 create or replace function public.admin_export_set(p_set bigint)
-returns jsonb language plpgsql stable security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_export_set') then return jsonb_build_object('error', '관리자만, 2단계 인증을 한 뒤에 할 수 있어요.'); end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   return coalesce((select jsonb_agg(jsonb_build_object(
       'word', w.word, 'senses', w.senses, 'notes', w.notes, 'synonyms', w.synonyms,
       'antonyms', w.antonyms, 'phrases', w.phrases, 'sentences', w.sentences) order by w.position)

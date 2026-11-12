@@ -29,6 +29,11 @@ const json = (obj, status = 200) =>
   });
 
 /* sb_secret_… 는 apikey 머리에만, 옛 eyJ… 키는 Authorization 에도 (voca-web 과 같음) */
+/* 학생의 IP·브라우저를 DB 보안 기록(sql/08_audit.sql)에 넘긴다. 비밀 키로 부를 때만 DB 가 믿는다. */
+const clientHeaders = req => ({
+  "x-client-ip": (req.headers.get("CF-Connecting-IP") || "").slice(0, 64),
+  "x-client-ua": (req.headers.get("User-Agent") || "").slice(0, 300),
+});
 function authHeaders(key) {
   const h = { apikey: key };
   if (key.startsWith("eyJ")) h.Authorization = `Bearer ${key}`;
@@ -99,7 +104,7 @@ export async function onRequestPost({ request, env }) {
 
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/record_answer`, {
       method: "POST",
-      headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json" },
+      headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json", ...clientHeaders(request) },
       body: JSON.stringify({ p_user: userId, p_word: wordId, p_correct: correct, p_level: asked, p_pay: coinLevel(asked, type),
                              p_typed: typed, p_len: Math.min(answer.trim().length, 200) }),
     });

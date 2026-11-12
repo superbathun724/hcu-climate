@@ -15,6 +15,11 @@ import { typesForLevel, question, coinLevel } from "../../js/quiz-core.js";
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+/* 학생의 IP·브라우저를 DB 보안 기록(sql/08_audit.sql)에 넘긴다. 비밀 키로 부를 때만 DB 가 믿는다. */
+const clientHeaders = req => ({
+  "x-client-ip": (req.headers.get("CF-Connecting-IP") || "").slice(0, 64),
+  "x-client-ua": (req.headers.get("User-Agent") || "").slice(0, 300),
+});
 function authHeaders(key) { const h = { apikey: key }; if (key.startsWith("eyJ")) h.Authorization = `Bearer ${key}`; return h; }
 async function whoIs(env, token) {
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: env.SUPABASE_SERVICE_KEY } });
@@ -64,7 +69,7 @@ export async function onRequestPost({ request, env }) {
 
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/issue_question_srv`, {
       method: "POST",
-      headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json" },
+      headers: { ...authHeaders(env.SUPABASE_SERVICE_KEY), "Content-Type": "application/json", ...clientHeaders(request) },
       body: JSON.stringify({ p_user: userId, p_word: wordId, p_type: type, p_level: asked }),
     });
     if (!res.ok) { console.error("issue_question_srv", res.status, await res.text()); return json({ error: "문제를 내지 못했어요. 잠시 뒤에 다시 해 주세요." }, 500); }

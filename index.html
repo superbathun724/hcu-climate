@@ -254,6 +254,20 @@
       <div class="frow"><button class="btn" id="exCsv">CSV 내려받기</button><button class="btn ghost" id="exCopy">전체 복사</button></div>
       <p class="msg" id="exMsg" hidden></p>
     </div>
+
+    <div class="row col" id="auditCard">
+      <div class="t">보안 기록</div>
+      <div class="d">누가, 언제, 어느 IP에서 무엇을 했는지 1년 동안 남아요. 고치거나 지울 수 없고, 줄마다 앞 줄과 이어진 해시가 있어 몰래 바꾸면 “무결성 확인”에서 드러나요. 학생은 계정 코드와 IP 앞 세 자리로만 보이고, 건의 글쓴이는 보이지 않아요. 이메일과 전체 IP가 담긴 원본은 운영 책임자가 법이나 학교 규정상 필요할 때만 확인해요. 이 기록을 본 것도 기록돼요.</div>
+      <div class="frow">
+        <label class="lbl" for="auPeriod">기간</label>
+        <select id="auPeriod"><option value="1">오늘</option><option value="7" selected>7일</option><option value="30">30일</option><option value="365">1년</option></select>
+        <input id="auQuery" maxlength="80" placeholder="계정 코드, IP, 종류(예: admin_denied)">
+        <button class="btn" id="auFind">찾기</button>
+      </div>
+      <div class="frow"><button class="btn ghost" id="auCsv">CSV 내려받기</button><button class="btn ghost" id="auVerify">무결성 확인</button></div>
+      <div id="auList"><p class="d">“찾기”를 누르면 보여요.</p></div>
+      <p class="msg" id="auMsg" hidden></p>
+    </div>
     </div>
   </section>
   </main>

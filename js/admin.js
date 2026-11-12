@@ -1,6 +1,6 @@
 /* ==========================================================
    admin.js — 관리 화면: 2단계 인증, 단어 CSV 올리기(덮어쓰기)·내려받기, 단어장 이름 바꾸기·숨기기·
-   삭제(7일 대기)·복구, 잠긴 계정, 건의함 내보내기
+   삭제(7일 대기)·복구, 잠긴 계정, 건의함 내보내기, 보안 기록(sql/08_audit.sql)
    모든 변경은 서버 함수(sql/02_words.sql 의 admin_…)로만 한다.
    그 함수들이 관리자인지, 이번 로그인에서 2단계 인증을 했는지 다시 확인하므로,
    이 파일을 고쳐도 학생은 아무것도 못 바꾸고, 비밀번호만 알아낸 사람도 못 바꾼다.
@@ -125,7 +125,7 @@ async function downloadSet(s, btn) {
   // 학생 계정이 못 읽는 열(유의어·반의어·예문)까지 담아야 해서 관리자 함수로 받는다(sql/02_words.sql)
   const { data, error } = await db.rpc("admin_export_set", { p_set: s.id });
   btn.disabled = false;
-  if (error) return say($("setMsg"), serverMsg(error));
+  if (error || data?.error) return say($("setMsg"), error ? serverMsg(error) : data.error);
   saveFile(wordsToCSV(data), `${s.name.replace(/[\\/:*?"<>|]/g, "_")}.csv`);
   say($("setMsg"), `「${s.name}」 ${data.length}단어를 내려받았어요.`, "good");
 }
@@ -177,7 +177,7 @@ $("upGo").addEventListener("click", async () => {
   btn.disabled = true;
   const { data, error } = await db.rpc("admin_upload_set", { p_name: $("upName").value, p_words: pending });
   btn.disabled = false;
-  if (error) return say($("upMsg"), serverMsg(error));
+  if (error || data?.error) return say($("upMsg"), error ? serverMsg(error) : data.error);
 
   say($("upMsg"), data.created
     ? `「${data.name}」 단어장을 만들었어요. 단어 ${data.added}개.`
@@ -261,6 +261,63 @@ $("lockList").addEventListener("click", async e => {
   loadLocks();
 });
 window.addEventListener("hcu:tab", e => { if (e.detail === "admin" && window.hcuProfile?.adminOk) loadLocks(); });
+
+/* ---------- 보안 기록 (sql/08_audit.sql) ----------
+   사고가 났을 때 증거로 쓰는 기록. 서버 함수 admin_audit 이 관리자·2단계 인증을 확인하고,
+   찾아본 사실도 기록에 남긴다. 화면에서는 고치거나 지울 수 없다(DB 가 막는다). */
+const ACTION = {
+  visit: "접속", admin_call: "관리 기능 사용", admin_denied: "관리 기능 시도(거부됨)",
+  admin_added: "관리자 추가", admin_removed: "관리자 삭제", lock: "계정 잠김", unlock: "잠금 풀림",
+  tap_flag: "탭 이상 표시", quiz_pause: "단어 코인 쉬어 감", send: "코인 보내기",
+  infra_vote: "시설 투표", infra_build: "시설 지음", suggestion_post: "건의 글", suggestion_mod: "건의 관리",
+  wordset_create: "단어장 만듦", wordset_update: "단어장 바뀜", wordset_delete: "단어장 지움", audit_purge: "오래된 기록 지움",
+};
+let auditRows = [];
+const auditArgs = limit => {
+  const days = Number($("auPeriod").value);
+  return { p_since: new Date(Date.now() - days * 864e5).toISOString(), p_until: new Date().toISOString(),
+           p_query: $("auQuery").value.trim() || null, p_limit: limit };
+};
+const detailText = d => Object.entries(d || {}).filter(([, v]) => v !== null && v !== "").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ");
+
+async function loadAudit() {
+  $("auFind").disabled = true;
+  const { data, error } = await db.rpc("admin_audit", auditArgs(300));
+  $("auFind").disabled = false;
+  if (error) return say($("auMsg"), serverMsg(error));
+  auditRows = data ?? [];
+  $("auList").innerHTML = auditRows.length ? auditRows.map(r => `
+    <div class="arow${r.action === "admin_denied" ? " warn" : ""}">
+      <div class="m"><b>${esc(ACTION[r.action] ?? r.action)}</b> <span class="d">${mis(esc(day(r.at)), esc(r.who ?? "시스템"), esc(r.ip ?? "IP 없음"))}</span></div>
+      <div class="d">${esc(detailText(r.detail)).slice(0, 300)}</div>
+    </div>`).join("") : `<p class="d">이 기간에 맞는 기록이 없어요.</p>`;
+  say($("auMsg"), `${auditRows.length}줄${auditRows.length === 300 ? " (최근 300줄만 보여요. 전부는 CSV로)" : ""}`, "good");
+}
+$("auFind").addEventListener("click", loadAudit);
+$("auQuery").addEventListener("keydown", e => { if (e.key === "Enter") loadAudit(); });
+
+$("auCsv").addEventListener("click", async () => {
+  const b = $("auCsv"); b.disabled = true;
+  const { data, error } = await db.rpc("admin_audit", auditArgs(5000));
+  b.disabled = false;
+  if (error) return say($("auMsg"), serverMsg(error));
+  const head = ["id", "시각(한국)", "시각(UTC)", "누구(학생은 계정 코드)", "종류", "내용", "IP(학생은 앞 세 자리)", "브라우저", "앞 줄 해시", "해시"];
+  const lines = [head.join(",")].concat((data ?? []).slice().reverse().map(r =>
+    [r.id, day(r.at), r.at, r.who, `${ACTION[r.action] ?? ""} (${r.action})`, JSON.stringify(r.detail), r.ip, r.user_agent, r.prev_hash, r.hash].map(cell).join(",")));
+  const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).replace(/[: ]/g, "-");
+  saveFile(lines.join("\n"), `보안기록_${stamp}.csv`);
+  say($("auMsg"), `${(data ?? []).length}줄을 내려받았어요. 파일을 고치지 말고 그대로 보관하세요.`, "good");
+});
+
+$("auVerify").addEventListener("click", async () => {
+  const b = $("auVerify"); b.disabled = true;
+  const { data, error } = await db.rpc("audit_verify");
+  b.disabled = false;
+  if (error || data?.error) return say($("auMsg"), error ? serverMsg(error) : data.error);
+  say($("auMsg"), data.ok
+    ? `무결성 확인: ${data.checked}줄 모두 이어져 있어요. 마지막 해시 ${String(data.last_hash ?? "").slice(0, 16)}…`
+    : `무결성 문제: ${data.broken_at}번 줄에서 끊겼어요. ${data.why}. 지금 CSV를 내려받아 보관하고 관리자들에게 알려 주세요.`, data.ok ? "good" : "");
+});
 
 /* ---------- 2단계 인증 (휴대폰 인증 앱의 6자리) ----------
    관리자는 비밀번호 + 인증 앱 6자리를 둘 다 알아야 관리 기능을 쓴다(서버 admin_ok 가 확인).

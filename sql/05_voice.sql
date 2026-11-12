@@ -129,7 +129,7 @@ create or replace function public.admin_answer_suggestion(p_id bigint, p_answer 
 returns void language plpgsql security definer set search_path = public as $$
 declare v text := nullif(btrim(coalesce(p_answer, '')), '');
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_answer_suggestion') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   if char_length(v) > 1000 then raise exception '답변은 1,000자까지예요.' using errcode = 'P0001'; end if;
   update public.suggestions
      set answer = v, answered_at = case when v is null then null else now() end
@@ -142,7 +142,7 @@ $$;
 create or replace function public.admin_approve_suggestion(p_id bigint, p_approve boolean)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_approve_suggestion') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   update public.suggestions
      set approved_at = case when coalesce(p_approve, true) then coalesce(approved_at, now()) end,
          hidden = case when coalesce(p_approve, true) then false else hidden end
@@ -163,7 +163,7 @@ $$;
 create or replace function public.admin_hide_suggestion(p_id bigint, p_hidden boolean)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_hide_suggestion') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   update public.suggestions set hidden = coalesce(p_hidden, true) where id = p_id;
   if not found then raise exception '글을 찾을 수 없어요.' using errcode = 'P0001'; end if;
 end;

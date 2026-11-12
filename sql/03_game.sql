@@ -194,9 +194,9 @@ $$;
 create or replace function public.admin_locked()
 returns table (user_id uuid, email text, class_id smallint, club_name text, locked_at timestamptz,
                reason text, detail jsonb, flags integer)
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_locked') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   return query
   select p.user_id, u.email::text, pr.class_id, c.name, p.locked_at, p.lock_reason,
          (select f.detail from public.flags f where f.user_id = p.user_id order by f.created_at desc limit 1),
@@ -213,7 +213,7 @@ $$;
 create or replace function public.admin_unlock(p_user uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  perform public.require_admin();
+  if not public.admin_gate('admin_unlock') then return; end if;   -- 기록을 남기고 조용히 끝(02 admin_gate)
   update public.players set locked_at = null, lock_reason = null, strikes = 0, strike_at = null where user_id = p_user;
   if not found then raise exception '계정을 찾을 수 없어요.' using errcode = 'P0001'; end if;
   update public.flags set resolved_at = now(), resolved_by = auth.uid() where user_id = p_user and resolved_at is null;
@@ -317,6 +317,8 @@ begin
   perform public.ensure_player(v_uid);
   select * into p from public.players where user_id = v_uid;
   if p.tap_day is distinct from public.kst_today() then p.taps_today := 0; end if;
+  -- 하루 첫 접속을 보안 기록에 남긴다(08_audit.sql). 그 파일을 안 돌렸으면 건너뛴다.
+  if to_regprocedure('public.audit_visit()') is not null then execute 'select public.audit_visit()'; end if;
   return jsonb_build_object(
     'balance', p.balance, 'taps_today', p.taps_today,
     'free_left', greatest(public.tap_free_daily() - p.taps_today, 0), 'energy', p.energy, 'sent', p.sent,
