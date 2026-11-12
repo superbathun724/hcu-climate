@@ -147,8 +147,23 @@ create or replace function public.tap_flags_to_lock() returns integer language s
 create or replace function public.coins_per_pct() returns integer language sql immutable as $$ select 20 $$;
 
 -- 재난: 몇 분마다, 몇 분 동안, 대비율을 얼마나 쓰는가
-create or replace function public.disaster_every()  returns interval language sql immutable as $$ select interval '8 minutes' $$;
-create or replace function public.disaster_length() returns interval language sql immutable as $$ select interval '4 minutes' $$;
+--   운영 기간(~2026-12-06) 기준: 30분마다 한 지역, 10분 동안. 하루 40번쯤, 한 지역에 하루 5번쯤 온다.
+--   새벽 2시~6시(한국)에는 새 재난이 생기지 않는다(밤새 깨어 있을 이유가 없게). 진행 중이던 재난은 끝까지 간다.
+create or replace function public.disaster_every()  returns interval language sql immutable as $$ select interval '30 minutes' $$;
+create or replace function public.disaster_length() returns interval language sql immutable as $$ select interval '10 minutes' $$;
+create or replace function public.disaster_quiet_from()  returns integer language sql immutable as $$ select 2 $$;   -- 이 시각(한국)부터
+create or replace function public.disaster_quiet_until() returns integer language sql immutable as $$ select 6 $$;   -- 이 시각 전까지 새 재난 없음
+
+-- 다음 재난이 생길 수 있는 시각: 마지막 재난 + 주기, 그 시각이 새벽(2~6시)이면 그날 6시
+create or replace function public.disaster_next_at()
+returns timestamptz language sql stable security definer set search_path = public as $$
+  with t as (select coalesce(max(starts_at) + public.disaster_every(), now()) as at from public.disasters)
+  select case when extract(hour from (t.at at time zone 'Asia/Seoul')) >= public.disaster_quiet_from()
+               and extract(hour from (t.at at time zone 'Asia/Seoul')) <  public.disaster_quiet_until()
+              then (date_trunc('day', t.at at time zone 'Asia/Seoul') + make_interval(hours => public.disaster_quiet_until())) at time zone 'Asia/Seoul'
+              else t.at end
+    from t
+$$;
 create or replace function public.disaster_drain()  returns numeric  language sql immutable as $$ select 30::numeric $$;
 create or replace function public.disaster_mult()   returns smallint language sql immutable as $$ select 2::smallint $$;
 -- 비축 상한(%). 넘게는 쌓이지 않는다. 재난 때 쓰이는 몫이 의미가 있게.
@@ -281,7 +296,7 @@ begin
     end if;
   end loop;
 
-  if not exists (select 1 from public.disasters where starts_at > now() - public.disaster_every()) then
+  if public.disaster_next_at() <= now() then
     insert into public.disasters (region_id, starts_at, ends_at, drain)
     select r.id, now(), now() + public.disaster_length(), public.region_drain(r.id)   -- 조기경보 시설만큼 덜 깎는다
       from public.regions r
@@ -299,7 +314,7 @@ begin
   if auth.uid() is null then raise exception '로그인이 필요해요.' using errcode = '42501'; end if;
   perform public.world_tick();
   select * into d from public.disasters where ends_at > now() order by starts_at desc limit 1;
-  select max(starts_at) + public.disaster_every() into v_next from public.disasters;
+  v_next := public.disaster_next_at();
   -- 가장 최근에 결과가 난 재난 (화면이 "방어 성공/실패"를 한 번 알린다)
   select jsonb_build_object('id', x.id, 'region_id', x.region_id, 'region_name', rr.name, 'result', x.result,
                             'bonus_pc', public.region_defense_bonus_pc(x.region_id))
@@ -554,6 +569,7 @@ revoke execute on function public.lock_player(uuid, text, jsonb)      from publi
 revoke execute on function public.assert_unlocked(uuid)               from public, anon, authenticated;
 revoke execute on function public.assert_surveyed(uuid)               from public, anon, authenticated;
 revoke execute on function public.world_tick()                        from public, anon, authenticated;
+revoke execute on function public.disaster_next_at()                  from public, anon, authenticated;
 revoke execute on function public.my_state()                          from public, anon;
 revoke execute on function public.submit_taps(integer, jsonb)         from public, anon;
 revoke execute on function public.send_coins(smallint, integer)       from public, anon;

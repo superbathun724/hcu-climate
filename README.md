@@ -103,8 +103,8 @@ Workers & Pages → hcu-climate → Settings → Variables and Secrets (Producti
   1단계 100 … 6단계 800) 다음 날에도 남는다. `03_game.sql` 의 `tap_free_daily()`, `04_study.sql` 의 `word_energy()`
 - 가입: 아이디가 `2510`+3자리면 학생(학생 반·동아리만), 숫자가 아닌 아이디는 교사("교사" 반만, 동아리는 자유),
   그 밖의 숫자 아이디(다른 학년)는 가입 불가. `01_schema.sql` 의 `student_id_pattern()`
-- 재난: 8분마다 한 지역, 4분 동안. 그동안 그 지역 대비율 30%가 조금씩 쓰이고, 보낸 코인은 2배.
-  `03_game.sql` 의 `disaster_every`·`disaster_length`·`disaster_drain`·`disaster_mult`.
+- 재난: 30분마다 한 지역, 10분 동안(새벽 2시~6시에는 새 재난 없음). 그동안 그 지역 대비율 30%가 조금씩 쓰이고, 보낸 코인은 2배.
+  `03_game.sql` 의 `disaster_every`·`disaster_length`·`disaster_quiet_from`·`disaster_quiet_until`·`disaster_drain`·`disaster_mult`.
   cron 없이, 접속한 학생 화면이 15초마다 부를 때 진행된다(아무도 없으면 멈춤)
 - 대비율은 지역 상한(기본 150%, 방파제 단계마다 +20%)까지 쌓이고, 넘친 코인(재난 중이면 2배)은 그 지역 **기금**이 된다
 - 기금으로 시설을 짓는다(`06_infra.sql`). 맡은 반이 투표하고, 표가 가장 많은 시설이 3표 이상(반 인원이 적으면 인원 수)이고
