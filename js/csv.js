@@ -119,7 +119,7 @@ export function countDuplicates(words) {
 /* ---------- 내보내기 (관리자 백업) ----------
    rowsToWords 가 그대로 다시 읽을 수 있는 모양으로 쓴다. 뜻·메모는 늘 "|" 를 넣어
    (품사가 비어도 "|뜻") 읽을 때 앞 칸에 이어 붙는 일이 없게 한다. */
-const deFormula = v => /^[=+\-@]/.test(v) ? "'" + v : v;                 // 엑셀 수식 방지
+const deFormula = v => /^[=+\-@\t\r]/.test(v) ? "'" + v : v;           // 엑셀 수식 방지 (탭·CR 로 시작하는 칸 포함, OWASP 권장)
 const csvCell = v => { const s = deFormula(String(v ?? "")); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 const clean = v => String(v ?? "").replace(/[;|]/g, ",").trim();         // 칸 안 구분자와 겹치지 않게
 
