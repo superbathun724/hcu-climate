@@ -10,9 +10,12 @@
 --       p_level < 지금 단계(복습) → 단계 그대로
 --   - 틀리면: 복습(p_level ≤ 지금 단계)이면 한 단계 내려가고, 도전(p_level > 지금 단계)이면 그대로
 --   - 코인은 고른 단계가 아니라 실제로 나온 문제 유형의 단계로 매긴다(p_pay).
---   - 같은 단어는 하루(한국 날짜)에 한 번만 코인을 받고 단계가 바뀐다.
---   - 그날 한 번 틀리거나 건너뛴 단어는(정답을 보여 주므로) 그날 다시 맞혀도 코인·단계가 그대로다.
---     → 같은 단어를 반복해서 코인을 불리는 길을 막는다. 하루 한도는 없다.
+--   - 코인은 하루(한국 날짜)에 "한 단어 × 한 단계"마다 한 번. 같은 단어도 단계가 다르면 그날 또 받는다.
+--     (단계 = 실제로 나온 문제 유형의 단계 p_pay. 6단계를 골라도 철자 문제가 나오면 2단계로 센다)
+--   - 그날 그 단계에서 틀리거나 건너뛰면(정답을 보여 주므로) 그날 그 단계로는 다시 맞혀도 코인이 없다.
+--     다른 단계는 그날도 받을 수 있다.
+--   - 기록(progress.study_day, paid_levels, wrong_levels)은 날짜가 바뀌면 저절로 비워진 것으로 본다(매일 초기화).
+--     → 같은 단어·같은 단계를 반복해서 코인을 불리는 길은 막는다. 하루 한도는 없다.
 --
 -- 자동 풀이(봇) 대비 — 사람은 거의 걸리지 않고, 걸려도 손해가 없게
 --   1. 문제를 받은 지 1.5초 안에 들어온 정답은 코인을 주지 않는다. 단계·날짜도 그대로 두어
@@ -35,6 +38,10 @@
 alter table public.progress add column if not exists last_correct_day date;
 -- 오늘 틀린(건너뛴) 날. 같은 날 다시 맞혀도 코인을 주지 않는다(틀리면 정답을 보여 주므로).
 alter table public.progress add column if not exists last_wrong_day date;
+-- 오늘(study_day) 코인을 받은 단계들과 틀린 단계들. study_day 가 오늘이 아니면 둘 다 빈 것으로 본다.
+alter table public.progress add column if not exists study_day    date;
+alter table public.progress add column if not exists paid_levels  smallint[] not null default '{}';
+alter table public.progress add column if not exists wrong_levels smallint[] not null default '{}';
 
 -- 문제를 낸 시각 (학생·단어마다 마지막 한 개만)
 create table if not exists public.quiz_issues (
@@ -116,7 +123,10 @@ declare
   v_rt integer;               -- 문제를 받고 답하기까지(ms)
   v_pause timestamptz;
   v_acc numeric; v_med numeric; v_m integer;
-  v_pays boolean;             -- 이번 답이 코인을 받는 답인가 (정답 + 오늘 아직 안 받았고 안 틀린 단어)
+  v_pays boolean;             -- 이번 답이 코인을 받는 답인가 (정답 + 오늘 이 단계에서 아직 안 받았고 안 틀림)
+  v_pay_lv smallint;          -- 코인을 매기는 단계 (실제로 나온 문제 유형)
+  v_paid smallint[];          -- 오늘 코인을 받은 단계들
+  v_wrong smallint[];         -- 오늘 틀린 단계들
   v_n integer; v_mean numeric; v_sd numeric;
 begin
   if not exists (select 1 from public.words w join public.word_sets s on s.id = w.set_id
@@ -134,11 +144,14 @@ begin
   select * into pr from public.progress where user_id = p_user and word_id = p_word for update;
   v_before := pr.srs_level;
   v_lv := least(greatest(coalesce(p_level, pr.srs_level), 0), 5);
+  v_pay_lv := least(v_lv, greatest(coalesce(p_pay, v_lv), 0));
+  if pr.study_day = v_today then v_paid := pr.paid_levels; v_wrong := pr.wrong_levels;
+  else v_paid := '{}'; v_wrong := '{}'; end if;                -- 날이 바뀌면 처음부터
 
   -- 1·2. 너무 빠른 정답, 1분 상한 (코인을 받을 답에만 해당)
   select issued_at into v_issued from public.quiz_issues where user_id = p_user and word_id = p_word;
   delete from public.quiz_issues where user_id = p_user and word_id = p_word;      -- 한 문제에 한 번
-  v_pays := p_correct and pr.last_correct_day is distinct from v_today and pr.last_wrong_day is distinct from v_today;
+  v_pays := p_correct and not (v_pay_lv = any(v_paid)) and not (v_pay_lv = any(v_wrong));
   v_rt := case when v_issued is null then null else (extract(epoch from now() - v_issued) * 1000)::integer end;
   select quiz_pause_until into v_pause from public.players where user_id = p_user;
   if v_pays then
@@ -185,13 +198,14 @@ begin
   end if;
 
   if p_correct then
-    if pr.last_correct_day = v_today then
-      v_already := true;                                  -- 오늘 이미 받음: 코인·단계 그대로
-    elsif pr.last_wrong_day = v_today then
-      null;                                               -- 오늘 한 번 틀림(건너뛰기 포함): 정답을 본 뒤라 코인·단계 그대로
+    if v_pay_lv = any(v_paid) then
+      v_already := true;                                  -- 오늘 이 단계에서 이미 받음: 코인·단계 그대로
+    elsif v_pay_lv = any(v_wrong) then
+      null;                                               -- 오늘 이 단계에서 틀림(건너뛰기 포함): 정답을 본 뒤라 코인·단계 그대로
     else
-      v_coins  := public.word_coins(least(v_lv, coalesce(p_pay, v_lv)));
-      v_energy := public.word_energy(least(v_lv, coalesce(p_pay, v_lv)));
+      v_coins  := public.word_coins(v_pay_lv);
+      v_energy := public.word_energy(v_pay_lv);
+      v_paid   := v_paid || v_pay_lv;
       if v_lv >= pr.srs_level then
         pr.srs_level := least(v_lv + 1, 5);               -- 도전 성공: 고른 단계의 다음으로
       end if;
@@ -200,13 +214,19 @@ begin
   else
     if v_lv <= pr.srs_level then pr.srs_level := greatest(pr.srs_level - 1, 0); end if;   -- 복습에서 틀림: 한 단계만 내린다
     pr.wrong_count := pr.wrong_count + 1;
-    if pr.last_correct_day is distinct from v_today then pr.last_wrong_day := v_today; end if;
+    if not (v_pay_lv = any(v_paid)) then
+      pr.last_wrong_day := v_today;
+      if not (v_pay_lv = any(v_wrong)) then v_wrong := v_wrong || v_pay_lv; end if;
+    end if;
   end if;
 
   update public.progress set
     srs_level        = pr.srs_level,
     last_correct_day = pr.last_correct_day,
     last_wrong_day   = pr.last_wrong_day,
+    study_day        = v_today,
+    paid_levels      = v_paid,
+    wrong_levels     = v_wrong,
     wrong_count      = pr.wrong_count,
     attempt_count    = attempt_count + 1,
     last_tested_at   = now()
@@ -219,7 +239,8 @@ begin
 
   return jsonb_build_object(
     'correct', p_correct, 'level_before', v_before, 'level', pr.srs_level, 'asked', v_lv,
-    'coins', v_coins, 'energy_gain', v_energy, 'energy', v_energy_now, 'already_today', v_already,
+    'coins', v_coins, 'energy_gain', v_energy, 'energy', v_energy_now, 'already_today', v_already, 'pay_level', v_pay_lv,
+    'paid_levels', to_jsonb(v_paid), 'wrong_levels', to_jsonb(v_wrong),
     'after_wrong', p_correct and not v_already and v_coins = 0,
     'balance', v_balance);
 end;

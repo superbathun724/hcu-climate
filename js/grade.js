@@ -11,6 +11,11 @@
                                           → "생기다" · "문제가 생기다" 둘 다 정답
      · 물결표는 있어도 없어도 정답      "~에 대응하다" → "대응하다" 도 정답
      · 공백·문장부호는 무시
+     · 전각 괄호 ［］【】 와 대괄호 앞뒤 띄어쓰기도 같은 대괄호로 본다   "인식 ［인지］ 하다"
+     · 빗금(/)으로 나눈 뜻도 각각 정답                                    "알다/깨닫다"
+
+   영어 답(철자·유의어·빈칸)도 대괄호는 바꿔 쓸 수 있는 말로 본다.
+     "cast doubt on [upon]" → "cast doubt on" · "cast doubt upon" 둘 다 정답
    ========================================================== */
 
 /** 비교용으로 다듬기 (한국어) */
@@ -86,6 +91,11 @@ function expandParens(s) {
   return [s, s.replace(/[()]/g, " ")];
 }
 
+/** 전각 대괄호를 반각으로, 대괄호 안팎의 띄어쓰기를 붙인다: "인식 ［ 인지 ］ 하다" → "인식[인지]하다" */
+const tidyBrackets = (s) => String(s ?? "")
+  .replace(/[［【〔]/g, "[").replace(/[］】〕]/g, "]")
+  .replace(/\s*\[\s*/g, "[").replace(/\s*\]/g, "]");
+
 /**
  * 물결표·대괄호·괄호를 모두 풀어 나올 수 있는 표기를 전부 만듭니다.
  * 저장된 뜻(정답 후보)과 학생이 적어 낸 답에 똑같이 씁니다 —
@@ -93,7 +103,7 @@ function expandParens(s) {
  */
 const allForms = (raw) => {
   const out = [];
-  for (const withT of expandTilde(raw ?? "")) {
+  for (const withT of expandTilde(tidyBrackets(raw))) {
     for (const withB of expandBrackets(withT)) {
       for (const form of expandParens(withB)) out.push(form);
     }
@@ -109,7 +119,7 @@ export function koKeys(raw) {
   const out = new Set();
   for (const form of allForms(raw)) {
     out.add(normKo(form));                                // 통째로
-    for (const part of form.split(/[,\u00b7;]/)) {            // 쪼갠 것
+    for (const part of form.split(/[,\u00b7;\/]/)) {         // 쪼갠 것 (빗금도)
       const k = normKo(part);
       if (k) out.add(k);
     }
@@ -159,13 +169,39 @@ export function checkMeaning(word, input) {
   return everyPartMatches(new Set(meaningKeys(word)), input);
 }
 
+/**
+ * 영어 표기에서 나올 수 있는 모양들. 대괄호는 앞 낱말을 바꿔 쓸 수 있는 말이다.
+ *   "cast doubt on [upon]" → "cast doubt on", "cast doubt upon", "cast doubt on upon"
+ * 대괄호가 없으면 [그대로] 하나.
+ */
+export function enVariants(raw) {
+  const s = tidyBrackets(raw).trim();
+  const m = /\[([^\]]*)\]/.exec(s);
+  if (!m) return [s];
+  const head = s.slice(0, m.index).trimEnd(), alt = m[1].trim(), tail = s.slice(m.index + m[0].length);
+  const forms = new Set([
+    head + tail,                                               // 묶인 말을 뺀 것
+    head.replace(/\S+$/, "") + alt + tail,                     // 앞 낱말을 바꿔 쓴 것
+    head + " " + alt + tail,                                   // 둘 다 쓴 것
+  ]);
+  const out = [];
+  for (const f of forms) for (const more of enVariants(f.replace(/\s+/g, " ").trim())) {
+    if (!out.includes(more)) out.push(more);
+    if (out.length >= MAX_VARIANTS) return out;
+  }
+  return out;
+}
+const enMatch = (expected, input) => {
+  const v = normEn(input);
+  return !!v && enVariants(expected).some(e => normEn(e) === v);
+};
+
 /** 한국어 → 영어 단어 채점 */
-export const checkSpelling = (word, input) =>
-  normEn(word.word) === normEn(input);
+export const checkSpelling = (word, input) => enMatch(word.word, input);
 
 /** 유의어·반의어 채점 — 여러 개 중 하나만 맞아도 정답 */
 export const checkRelated = (list, input) =>
-  (list ?? []).some(o => normEn(o.word) === normEn(input));
+  (list ?? []).some(o => enMatch(o.word, input));
 
 /**
  * 정답 문장 하나와 입력을 비교합니다.

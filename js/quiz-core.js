@@ -14,7 +14,7 @@
    이때 코인은 고른 단계가 아니라 **실제로 나온 유형**의 값이다(coinLevel). 6단계를 골라도 철자 문제면 2코인.
    스스로 채점하는 문제는 없다. 모두 자동 채점이라 코인을 줄 수 있다.
    ========================================================== */
-import { checkMeaning, checkSpelling, checkRelated, normEn, meaningAnswer, relatedAnswer } from "./grade.js";
+import { checkMeaning, checkSpelling, checkRelated, normEn, meaningAnswer, relatedAnswer, enVariants } from "./grade.js";
 
 export const MAX_LEVEL = 5;
 export const COINS = [1, 2, 3, 4, 5, 8];          // 단계별 코인 (sql/04_study.sql 의 word_coins 와 같게)
@@ -28,7 +28,15 @@ const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  */
 export function cloze(text, word) {
   if (!text || !word) return null;
+  for (const v of enVariants(word)) {                       // "cast doubt on [upon]" 처럼 대괄호가 있으면 모양마다
+    const c = clozeOne(text, v);
+    if (c) return c;
+  }
+  return null;
+}
+function clozeOne(text, word) {
   const w = word.trim();
+  if (!w) return null;
   const tries = [w];
   if (!w.includes(" ") && w.length >= 4 && /[ey]$/i.test(w)) tries.push(w.slice(0, -1));   // make→making, study→studies
   for (const base of tries) {

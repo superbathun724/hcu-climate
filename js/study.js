@@ -33,9 +33,11 @@ let pickLevel = -1;    // -1 = 내 단계대로, 0~5 = 모든 단어를 그 단�
 let pickCount = 20;    // 0 = 전체
 
 const levelOf = w => w.progress?.[0]?.srs_level ?? 0;
-const doneToday = w => w.progress?.[0]?.last_correct_day === kstToday();
-const wrongToday = w => w.progress?.[0]?.last_wrong_day === kstToday();      // 오늘 한 번 틀린 단어: 코인은 내일
-const noCoinToday = w => doneToday(w) || wrongToday(w);
+// 오늘 기록: 코인은 "한 단어 × 한 단계"마다 하루 한 번(sql/04_study.sql). 날짜가 바뀌면 빈 것으로 본다.
+const today = w => { const p = w.progress?.[0]; return p?.study_day === kstToday() ? p : { paid_levels: [], wrong_levels: [] }; };
+const paidAt  = (w, lv) => (today(w).paid_levels ?? []).includes(lv);     // 오늘 이 단계 코인을 이미 받음
+const wrongAt = (w, lv) => (today(w).wrong_levels ?? []).includes(lv);    // 오늘 이 단계에서 틀림: 이 단계 코인은 내일
+const noCoinToday = w => paidAt(w, askLevel(w)) || wrongAt(w, askLevel(w));
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 async function start(s) {
@@ -50,7 +52,7 @@ async function start(s) {
 
   // progress 는 RLS 때문에 내 것만 붙어 온다
   const { data, error } = await db.from("words")
-    .select("id, word, senses, phrases, progress(srs_level, last_correct_day, last_wrong_day)")   // 답이 든 열은 못 읽는다(sql/02_words.sql)
+    .select("id, word, senses, phrases, progress(srs_level, study_day, paid_levels, wrong_levels)")   // 답이 든 열은 못 읽는다(sql/02_words.sql)
     .eq("set_id", s.id)
     .order("position");
   if (error) { $("stHead").innerHTML = mis(esc(s.name), "불러오지 못했어요"); return; }
@@ -96,7 +98,7 @@ function plan() {
     ? "단어마다 지금 단계 문제가 나와요."
     : `모든 단어가 ${pickLevel + 1}단계(${TYPE_NAME[pickLevel]}) 문제로 나와요. 내 단계보다 높으면 도전이라 맞히면 ${pickLevel >= 4 ? "6단계가 되고" : `${pickLevel + 2}단계로 올라가고`}, 틀려도 단계는 그대로예요. 내 단계보다 낮으면 복습이에요.`;
   $("stPlan").textContent = n
-    ? `${how} ${take}개, ${fresh ? `오늘 아직 코인을 안 받은 단어부터 나와요.` : "모두 오늘 코인을 이미 받은 단어라 연습만 돼요."}`
+    ? `${how} ${take}개, ${fresh ? `오늘 이 단계 코인을 아직 안 받은 단어부터 나와요.` : "모두 오늘 이 단계 코인을 이미 받은 단어예요. 다른 단계를 고르면 코인을 또 받을 수 있어요."}`
     : "이 단계로 낼 수 있는 문제가 없어요.";
   $("stStart").disabled = !n;
   $("stStart").textContent = n ? `공부 시작 (${take}개)` : "공부 시작";
@@ -226,8 +228,8 @@ async function ask() {
   cur = { w, level, type, pay, keys: 0 };
   const mode = level > mine ? "도전" : level < mine ? "복습" : "";
   $("stType").innerHTML = mis(`${level + 1}단계${mode ? ` ${mode}` : ""}`, esc(q.label),
-    doneToday(w) ? "오늘은 이 단어 코인을 이미 받았어요"
-      : wrongToday(w) ? "오늘 한 번 틀린 단어라 코인은 내일 받아요"
+    paidAt(w, pay) ? "오늘 이 단계 코인은 이미 받았어요"
+      : wrongAt(w, pay) ? "오늘 이 단계에서 틀린 단어라 이 단계 코인은 내일 받아요"
       : `맞히면 ${COINS[pay]}코인, 에너지 ${ENERGY[pay]}`);
   drawPrompt(q);
   $("stSub").textContent = q.sub || "";
@@ -286,9 +288,8 @@ async function submit(answer) {
 
   // 화면의 단계·날짜를 서버 값으로
   const p = cur.w.progress?.[0] ?? {};
-  cur.w.progress = [{ ...p, srs_level: body.level,
-    last_correct_day: body.correct && body.coins ? kstToday() : p.last_correct_day,
-    last_wrong_day: body.correct ? p.last_wrong_day : kstToday() }];
+  cur.w.progress = [{ ...p, srs_level: body.level, study_day: kstToday(),
+    paid_levels: body.paid_levels ?? today(cur.w).paid_levels, wrong_levels: body.wrong_levels ?? today(cur.w).wrong_levels }];
   // 코인은 맞힐 때마다 서버 지갑에 바로 들어간다(record_answer). 중간에 그만둬도 이미 받은 코인은 그대로.
   if (body.balance != null) setBalance(body.balance);
   if (body.coins) coinPop("stCoinChip", body.coins);
@@ -300,9 +301,9 @@ async function submit(answer) {
               : body.level < body.level_before ? `${body.level + 1}단계로 한 단계 내려가요.` : `단계는 ${body.level + 1}단계 그대로예요.`;
   if (body.correct) {
     showResult("good", body.already_today
-      ? `맞았어요! 이 단어는 오늘 코인을 이미 받았어요.`
+      ? `맞았어요! 이 단어는 오늘 이 단계 코인을 이미 받았어요. 다른 단계로 풀면 또 받을 수 있어요.`
       : body.after_wrong
-      ? `맞았어요! 오늘 한 번 틀린 단어라 코인과 단계는 내일 다시 도전해요.`
+      ? `맞았어요! 오늘 이 단계에서 한 번 틀린 단어라 이 단계 코인은 내일 받아요. 다른 단계는 오늘도 받을 수 있어요.`
       : `맞았어요! +${body.coins}코인, 에너지 +${body.energy_gain ?? 0}(탭 ${body.energy_gain ?? 0}번). ${moved}`, body.answer);
   } else {
     showResult("bad", `${answer ? "틀렸어요." : "괜찮아요."} ${moved}`, body.answer);
