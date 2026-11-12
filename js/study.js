@@ -36,8 +36,7 @@ const levelOf = w => w.progress?.[0]?.srs_level ?? 0;
 // 오늘 기록: 코인은 "한 단어 × 한 단계"마다 하루 한 번(sql/04_study.sql). 날짜가 바뀌면 빈 것으로 본다.
 const today = w => { const p = w.progress?.[0]; return p?.study_day === kstToday() ? p : { paid_levels: [], wrong_levels: [] }; };
 const paidAt  = (w, lv) => (today(w).paid_levels ?? []).includes(lv);     // 오늘 이 단계 코인을 이미 받음
-const wrongAt = (w, lv) => (today(w).wrong_levels ?? []).includes(lv);    // 오늘 이 단계에서 틀림: 이 단계 코인은 내일
-const noCoinToday = w => paidAt(w, askLevel(w)) || wrongAt(w, askLevel(w));
+const noCoinToday = w => paidAt(w, askLevel(w));                         // 틀린 단어는 다시 맞히면 받는다
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 async function start(s) {
@@ -229,7 +228,6 @@ async function ask() {
   const mode = level > mine ? "도전" : level < mine ? "복습" : "";
   $("stType").innerHTML = mis(`${level + 1}단계${mode ? ` ${mode}` : ""}`, esc(q.label),
     paidAt(w, pay) ? "오늘 이 단계 코인은 이미 받았어요"
-      : wrongAt(w, pay) ? "오늘 이 단계에서 틀린 단어라 이 단계 코인은 내일 받아요"
       : `맞히면 ${COINS[pay]}코인, 에너지 ${ENERGY[pay]}`);
   drawPrompt(q);
   $("stSub").textContent = q.sub || "";

@@ -12,8 +12,9 @@
 --   - 코인은 고른 단계가 아니라 실제로 나온 문제 유형의 단계로 매긴다(p_pay).
 --   - 코인은 하루(한국 날짜)에 "한 단어 × 한 단계"마다 한 번. 같은 단어도 단계가 다르면 그날 또 받는다.
 --     (단계 = 실제로 나온 문제 유형의 단계 p_pay. 6단계를 골라도 철자 문제가 나오면 2단계로 센다)
---   - 그날 그 단계에서 틀리거나 건너뛰면(정답을 보여 주므로) 그날 그 단계로는 다시 맞혀도 코인이 없다.
---     다른 단계는 그날도 받을 수 있다.
+--   - 틀리거나 건너뛰어도 막지 않는다. 그 단계에서 아직 코인을 안 받았으면 다시 맞혀서 받을 수 있다
+--     (정답을 본 뒤 맞혀도 된다. 대신 한 단어 한 단계에 하루 한 번뿐이라 늘릴 수는 없다).
+--     wrong_levels 는 기록으로만 남긴다.
 --   - 기록(progress.study_day, paid_levels, wrong_levels)은 날짜가 바뀌면 저절로 비워진 것으로 본다(매일 초기화).
 --     → 같은 단어·같은 단계를 반복해서 코인을 불리는 길은 막는다. 하루 한도는 없다.
 --
@@ -151,7 +152,7 @@ begin
   -- 1·2. 너무 빠른 정답, 1분 상한 (코인을 받을 답에만 해당)
   select issued_at into v_issued from public.quiz_issues where user_id = p_user and word_id = p_word;
   delete from public.quiz_issues where user_id = p_user and word_id = p_word;      -- 한 문제에 한 번
-  v_pays := p_correct and not (v_pay_lv = any(v_paid)) and not (v_pay_lv = any(v_wrong));
+  v_pays := p_correct and not (v_pay_lv = any(v_paid));
   v_rt := case when v_issued is null then null else (extract(epoch from now() - v_issued) * 1000)::integer end;
   select quiz_pause_until into v_pause from public.players where user_id = p_user;
   if v_pays then
@@ -200,8 +201,6 @@ begin
   if p_correct then
     if v_pay_lv = any(v_paid) then
       v_already := true;                                  -- 오늘 이 단계에서 이미 받음: 코인·단계 그대로
-    elsif v_pay_lv = any(v_wrong) then
-      null;                                               -- 오늘 이 단계에서 틀림(건너뛰기 포함): 정답을 본 뒤라 코인·단계 그대로
     else
       v_coins  := public.word_coins(v_pay_lv);
       v_energy := public.word_energy(v_pay_lv);
