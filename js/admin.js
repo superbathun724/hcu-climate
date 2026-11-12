@@ -17,10 +17,10 @@ const changed = () => window.dispatchEvent(new Event("hcu:sets-changed"));
 /* ---------- 단어장 목록 ---------- */
 async function loadAdminSets() {
   const { data, error } = await db.from("word_sets")
-    .select("id, name, hidden, deleted_at, words(count)")
+    .select("id, name, hidden, deleted_at, word_count")   // word_count: sql/02_words.sql 계산 열
     .order("name");
   if (error) { $("setAdmin").innerHTML = `<p class="d">불러오지 못했어요.</p>`; return; }
-  sets = data.map(s => ({ id: s.id, name: s.name, hidden: s.hidden, deleted_at: s.deleted_at, count: s.words?.[0]?.count ?? 0 }));
+  sets = data.map(s => ({ id: s.id, name: s.name, hidden: s.hidden, deleted_at: s.deleted_at, count: s.word_count ?? 0 }));
   $("setAdmin").innerHTML = sets.length ? sets.map(adminRow).join("") : `<p class="d">아직 단어장이 없어요.</p>`;
 }
 
@@ -131,57 +131,82 @@ async function downloadSet(s, btn) {
 }
 
 /* ---------- CSV 올리기 ---------- */
+// 여러 파일을 한 번에: 파일마다 단어장 하나. [{name, words, file, error}]
+const MAX_FILES = 30;
 function resetUpload() {
   pending = null;
   $("upFile").value = "";
   $("upPreview").hidden = true;
+  $("upList").innerHTML = "";
 }
 
 function describe() {
-  const name = $("upName").value.trim();
-  const same = sets.find(s => s.name === name);
-  const dup = countDuplicates(pending);
-  const first = pending.slice(0, 3).map(w => w.word).join(", ");
-  $("upInfo").innerHTML =
-    `${pending.length}줄, 처음 단어: ${esc(first)}${pending.length > 3 ? " …" : ""}` +
-    (dup ? `<br>같은 단어가 ${dup}번 겹쳐요. 뒤에 나온 줄을 써요.` : "") +
-    (same ? `<br><b class="warn">「${esc(name)}」 단어장이 이미 있어요. 덮어쓰면 CSV에 없는 단어는 지워지고, 같은 단어는 학생 진도가 그대로 남아요.</b>` : "");
-  $("upGo").textContent = same ? "덮어쓰기" : "올리기";
+  const ok = pending.filter(f => !f.error);
+  $("upList").innerHTML = pending.map((f, i) => {
+    if (f.error) return `<div class="arow"><div class="m"><b>${esc(f.file)}</b></div><div class="d warn">${esc(f.error)} 이 파일은 건너뛰어요.</div></div>`;
+    const same = sets.find(s => s.name === f.name.trim());
+    const dupNames = pending.filter(g => !g.error && g.name.trim() === f.name.trim()).length > 1;
+    const dup = countDuplicates(f.words);
+    const first = f.words.slice(0, 3).map(w => w.word).join(", ");
+    return `<div class="arow">
+      <label class="lbl" for="upName${i}">단어장 이름 (${esc(f.file)})</label>
+      <input id="upName${i}" data-i="${i}" maxlength="60" value="${esc(f.name)}">
+      <div class="d">${f.words.length}줄, 처음 단어: ${esc(first)}${f.words.length > 3 ? " …" : ""}${dup ? `, 같은 단어 ${dup}번 겹침(뒤에 나온 줄을 써요)` : ""}</div>
+      ${same ? `<div class="d warn">「${esc(f.name.trim())}」 단어장이 이미 있어요. 덮어쓰면 CSV에 없는 단어는 지워지고, 같은 단어는 학생 진도가 그대로 남아요.</div>` : ""}
+      ${dupNames ? `<div class="d warn">같은 이름이 두 번 있어요. 나중 파일이 앞 파일을 덮어써요. 이름을 바꿔 주세요.</div>` : ""}
+    </div>`;
+  }).join("");
+  const over = ok.filter(f => sets.some(s => s.name === f.name.trim())).length;
+  $("upInfo").textContent = ok.length ? `단어장 ${ok.length}개를 올려요${over ? ` (그중 ${over}개는 덮어쓰기)` : ""}.` : "올릴 수 있는 파일이 없어요.";
+  $("upGo").disabled = !ok.length;
+  $("upGo").textContent = ok.length > 1 ? `${ok.length}개 올리기` : over ? "덮어쓰기" : "올리기";
 }
 
 $("upFile").addEventListener("change", async () => {
-  const f = $("upFile").files[0];
+  const files = [...$("upFile").files];
   say($("upMsg"), "");
-  if (!f) return;
-  if (f.size > 2_000_000) { resetUpload(); return say($("upMsg"), "파일이 너무 커요(2MB까지)."); }
-
-  let words;
-  try { words = rowsToWords(await f.text()); }
-  catch { resetUpload(); return say($("upMsg"), "CSV를 읽지 못했어요. 형식을 확인해 주세요."); }
-
-  if (!words.length) { resetUpload(); return say($("upMsg"), "단어가 하나도 없어요. 첫 줄이 word,senses,… 로 시작하는지 확인해 주세요."); }
-  if (words.length > MAX_ROWS) { resetUpload(); return say($("upMsg"), `한 번에 ${MAX_ROWS.toLocaleString()}줄까지 올릴 수 있어요. 지금 ${words.length.toLocaleString()}줄이에요.`); }
-
-  pending = words;
-  $("upName").value = nameFromFile(f.name);
+  if (!files.length) return;
+  if (files.length > MAX_FILES) { resetUpload(); return say($("upMsg"), `한 번에 ${MAX_FILES}개 파일까지 올릴 수 있어요.`); }
+  pending = [];
+  for (const f of files) {
+    const item = { file: f.name, name: nameFromFile(f.name), words: [], error: null };
+    if (f.size > 2_000_000) item.error = "파일이 너무 커요(2MB까지).";
+    else {
+      try { item.words = rowsToWords(await f.text()); }
+      catch { item.error = "CSV를 읽지 못했어요. 형식을 확인해 주세요."; }
+      if (!item.error && !item.words.length) item.error = "단어가 하나도 없어요. 첫 줄이 word,senses,… 로 시작하는지 확인해 주세요.";
+      if (!item.error && item.words.length > MAX_ROWS) item.error = `한 파일에 ${MAX_ROWS.toLocaleString()}줄까지예요. 지금 ${item.words.length.toLocaleString()}줄.`;
+    }
+    pending.push(item);
+  }
   $("upPreview").hidden = false;
   describe();
 });
 
-$("upName").addEventListener("input", () => pending && describe());
+$("upList").addEventListener("input", e => {
+  const i = e.target.dataset?.i; if (i == null || !pending) return;
+  pending[i].name = e.target.value;
+  clearTimeout(describe.t); describe.t = setTimeout(() => {          // 입력 중에는 다시 그리지 않고, 멈추면 경고만 새로
+    const at = document.activeElement?.id, pos = document.activeElement?.selectionStart;
+    describe();
+    if (at) { const el = $(at); el?.focus(); el?.setSelectionRange?.(pos, pos); }
+  }, 400);
+});
 $("upCancel").addEventListener("click", () => { resetUpload(); say($("upMsg"), ""); });
 
 $("upGo").addEventListener("click", async () => {
   if (!pending) return;
-  const btn = $("upGo");
-  btn.disabled = true;
-  const { data, error } = await db.rpc("admin_upload_set", { p_name: $("upName").value, p_words: pending });
-  btn.disabled = false;
-  if (error || data?.error) return say($("upMsg"), error ? serverMsg(error) : data.error);
-
-  say($("upMsg"), data.created
-    ? `「${data.name}」 단어장을 만들었어요. 단어 ${data.added}개.`
-    : `「${data.name}」 단어장을 덮어썼어요. 추가 ${data.added}, 바뀜 ${data.updated}, 삭제 ${data.removed}`, "good");
+  const todo = pending.filter(f => !f.error);
+  const btn = $("upGo"); btn.disabled = true; $("upCancel").disabled = true;
+  const done = [], failed = [];
+  for (const [k, f] of todo.entries()) {
+    say($("upMsg"), `올리는 중… ${k + 1} / ${todo.length} 「${f.name.trim()}」`);
+    const { data, error } = await db.rpc("admin_upload_set", { p_name: f.name, p_words: f.words });
+    if (error || data?.error) { failed.push(`「${f.name.trim()}」: ${error ? serverMsg(error) : data.error}`); continue; }
+    done.push(data.created ? `「${data.name}」 새로 ${data.added}단어` : `「${data.name}」 덮어씀(추가 ${data.added}, 바뀜 ${data.updated}, 삭제 ${data.removed})`);
+  }
+  btn.disabled = false; $("upCancel").disabled = false;
+  say($("upMsg"), [done.length ? `${done.length}개 올렸어요. ${done.join(", ")}` : "", failed.length ? `실패 ${failed.length}개: ${failed.join(" / ")}` : ""].filter(Boolean).join("  "), failed.length ? "" : "good");
   resetUpload();
   await loadAdminSets();
   changed();

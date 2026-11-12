@@ -222,12 +222,11 @@
     <div class="grid" id="adminTools" hidden>
     <div class="row col" id="upCard">
       <div class="t">단어 CSV 올리기</div>
-      <div class="d">voca-web과 같은 형식이에요. 한 번에 1,000줄까지. 이름이 같은 단어장이 있으면 덮어써요.</div>
+      <div class="d">voca-web과 같은 형식이에요. 파일 여러 개를 한 번에 고르면 파일마다 단어장이 하나씩 만들어져요(파일 이름이 단어장 이름, 바꿀 수 있어요). 한 파일에 1,000줄, 한 번에 30개 파일까지. 이름이 같은 단어장이 있으면 덮어써요.</div>
       <code>word,senses,notes,synonyms,antonyms,phrase1,phrase1_ko,phrase2,phrase2_ko,sentence1,sentence1_ko</code>
-      <label class="filebtn btn">CSV 파일 고르기<input type="file" id="upFile" accept=".csv,text/csv" hidden></label>
+      <label class="filebtn btn">CSV 파일 고르기 (여러 개 가능)<input type="file" id="upFile" accept=".csv,text/csv" multiple hidden></label>
       <div id="upPreview" hidden>
-        <label class="lbl" for="upName">단어장 이름 (파일 이름에서 가져옴)</label>
-        <input id="upName" maxlength="60">
+        <div id="upList"></div>
         <p class="d" id="upInfo"></p>
         <div class="frow"><button class="btn ghost" id="upCancel">취소</button><button class="btn" id="upGo">올리기</button></div>
       </div>

@@ -9,7 +9,7 @@ import { $, esc, onProfile } from "./ui.js";
 export async function loadSets() {
   const box = $("sets");
   const { data, error } = await db.from("word_sets")
-    .select("id, name, hidden, words(count)")
+    .select("id, name, hidden, word_count")   // word_count: sql/02_words.sql 계산 열
     .is("deleted_at", null)             // 삭제 대기 중인 것은 관리자에게도 단어 탭에서는 안 보인다
     .order("name");
   if (error) { box.innerHTML = `<p class="note">단어장을 불러오지 못했어요.</p>`; return; }
@@ -18,7 +18,7 @@ export async function loadSets() {
   box.innerHTML = data.map(s => `
     <div class="row">
       <div class="m"><div class="t">${esc(s.name)}${s.hidden ? ` <span class="tag hid">숨김</span>` : ""}</div>
-        <div class="d">${s.words?.[0]?.count ?? 0}단어</div></div>
+        <div class="d">${s.word_count ?? 0}단어</div></div>
       <div class="btns">
         <button class="btn ghost" data-view="${s.id}" data-name="${esc(s.name)}">보기</button>
         <button class="btn coin" data-study="${s.id}" data-name="${esc(s.name)}">공부하기</button>

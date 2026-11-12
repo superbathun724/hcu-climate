@@ -297,6 +297,16 @@ revoke execute on function public.admin_set_hidden(bigint, boolean) from public,
 revoke execute on function public.admin_delete_set(bigint)          from public, anon;
 revoke execute on function public.admin_restore_set(bigint)         from public, anon;
 revoke execute on function public.purge_deleted_sets()              from public, anon, authenticated;
+-- 단어장마다 단어 수. 화면이 select=...,word_count 로 읽는다(PostgREST 계산 열).
+-- 예전의 words(count) 는 열 단위 권한(위) 때문에 permission denied 가 나서, 단어장 목록이 통째로 안 보였다.
+-- 단어장 행은 부른 사람의 RLS 를 통과한 것만 들어오므로, 개수만 세는 이 함수는 definer 여도 된다.
+create or replace function public.word_count(s public.word_sets)
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::integer from public.words w where w.set_id = s.id
+$$;
+revoke execute on function public.word_count(public.word_sets) from public, anon;
+grant  execute on function public.word_count(public.word_sets) to authenticated;
+
 -- 관리자 내려받기 (모든 열). 학생 계정은 유의어·반의어·예문 열을 못 읽으므로 이 함수로만.
 create or replace function public.admin_export_set(p_set bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$

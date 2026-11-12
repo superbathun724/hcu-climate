@@ -335,6 +335,8 @@ code { display: block; margin: var(--space-xs) 0; padding: var(--space-xs); bord
 .filebtn { margin-top: var(--space-2xs); }
 #upInfo { margin-top: var(--space-xs); }
 #upInfo .warn { color: var(--color-alert-ink); font-weight: 700; }
+#upList .warn { color: var(--color-alert-ink); font-weight: 700; }
+#upList input { width: 100%; margin: var(--space-3xs) 0; }
 .arow { padding: var(--space-sm) 0; box-shadow: inset 0 var(--rule-hair) 0 0 var(--color-rule); }
 .arow.warn .m b { color: var(--color-alert-ink); }
 #auditCard .frow { flex-wrap: wrap; align-items: center; }
