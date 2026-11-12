@@ -9,7 +9,7 @@
 --
 -- 한 덩어리(트랜잭션)로 돈다. 중간에 오류가 나면 아무것도 지워지지 않는다.
 -- 되돌릴 수 없으니, 필요하면 먼저 Supabase → Database → Backups 를 확인한다.
--- 01~08, 07 을 모두 돌린 뒤에 돌린다. 08(보안 기록)을 안 돌렸으면 보안 기록 부분은 건너뛴다.
+-- 01~09, 07 을 모두 돌린 뒤에 돌린다. 08(보안 기록)을 안 돌렸으면 보안 기록 부분은 건너뛴다.
 -- =========================================================
 
 begin;
@@ -40,6 +40,16 @@ truncate table
 
 update public.regions      set shield = 0, fund = 0, updated_at = now();
 update public.region_infra set level = 0;
+
+-- 설문(09): 시험 응답을 지우고, 배포 시각을 지금으로, 최종 제출은 닫힌 상태로 처음부터
+do $$
+begin
+  if to_regclass('public.survey_responses') is not null then
+    truncate table public.survey_responses, public.final_submissions, public.final_results restart identity;
+    insert into public.app_settings (key, value) values ('launch_at', to_jsonb(now())), ('final', '{"open": false, "closed": false}'::jsonb)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  end if;
+end $$;
 
 -- 보안 기록: 배포 전 시험 기록을 비우고, 첫 줄에 초기화한 사실을 남긴다
 do $$

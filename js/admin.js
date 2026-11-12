@@ -296,6 +296,8 @@ const ACTION = {
   tap_flag: "탭 이상 표시", quiz_pause: "단어 코인 쉬어 감", send: "코인 보내기",
   infra_vote: "시설 투표", infra_build: "시설 지음", suggestion_post: "건의 글", suggestion_mod: "건의 관리",
   wordset_create: "단어장 만듦", wordset_update: "단어장 바뀜", wordset_delete: "단어장 지움", audit_purge: "오래된 기록 지움",
+  survey_pre: "사전 설문", final_submit: "최종 제출(사후 설문)", final_open: "최종 제출 열림", final_close: "최종 제출 닫힘·순위 확정",
+  launch_reset: "배포 초기화",
 };
 let auditRows = [];
 const auditArgs = limit => {
@@ -344,6 +346,72 @@ $("auVerify").addEventListener("click", async () => {
     : `무결성 문제: ${data.broken_at}번 줄에서 끊겼어요. ${data.why}. 지금 CSV를 내려받아 보관하고 관리자들에게 알려 주세요.`, data.ok ? "good" : "");
 });
 
+
+/* ---------- 설문과 최종 제출 (sql/09_survey.sql) ---------- */
+const pct = (a, b) => b ? `${Math.round(a / b * 100)}%` : "0%";
+const fx = v => v == null ? "–" : Number(v).toFixed(2);
+async function loadSurveyAdmin() {
+  const { data, error } = await db.rpc("admin_survey_summary");
+  if (error || data?.error) { $("svAdm").innerHTML = `<p class="d">${esc(error ? "설문 기능이 아직 없어요(sql/09_survey.sql 을 돌려 주세요)." : data.error)}</p>`; return; }
+  const f = data.final || {};
+  $("finOpen").disabled = !!f.open;
+  $("finClose").disabled = !f.open;
+  $("svAdm").innerHTML = `
+    <p class="d">${mis(`최종 제출 ${f.open ? "<b>열림</b>" : f.closed ? "닫힘(확정됨)" : "아직 안 열림"}`,
+      `가입 ${data.members}명`, `사전 ${data.pre}명 (${pct(data.pre, data.members)})`, `사후 ${data.post}명`, `둘 다 ${data.paired}명`,
+      `교사 ${data.teachers}명`, `배포 전 가입 ${data.late}명`, data.fast ? `30초 안에 낸 응답 ${data.fast}개` : "")}</p>
+    <div class="svsum">
+      <div class="svr svh"><span>문항</span><span>사전</span><span>사후</span><span>같은 사람 변화</span></div>
+      ${(data.items ?? []).map(it => `<div class="svr"><span>${it.pos}. ${esc(it.body)}</span>
+        <span>${fx(it.pre_mean)} <small>(${it.pre_n})</small></span><span>${fx(it.post_mean)} <small>(${it.post_n})</small></span>
+        <span>${it.paired_change == null ? "–" : (it.paired_change > 0 ? "+" : "") + Number(it.paired_change).toFixed(2)} <small>(${it.paired_n})</small></span></div>`).join("")}
+    </div>
+    <p class="d">평균은 1(전혀 아니다)~5(매우 그렇다), “응답하지 않음”은 빼고 계산해요. 괄호는 응답 수예요. 반별 응답 수: ${(data.by_class ?? []).map(c => `${esc(c.name)} ${c.pre}/${c.post}`).join(", ")} (사전/사후)</p>`;
+}
+
+const armClose = { t: 0 };
+$("finOpen").addEventListener("click", async () => {
+  const b = $("finOpen"); b.disabled = true;
+  const { data, error } = await db.rpc("admin_final_set", { p_open: true });
+  if (error || data?.error) { b.disabled = false; return say($("svAdmMsg"), error ? serverMsg(error) : data.error); }
+  say($("svAdmMsg"), "최종 제출을 열었어요. 학생 화면에는 몇 분 안에(또는 새로고침하면 바로) 사후 설문 안내가 떠요.", "good");
+  loadSurveyAdmin();
+});
+$("finClose").addEventListener("click", async () => {
+  const b = $("finClose");
+  if (!armClose.t) {
+    b.textContent = "정말 닫고 확정"; b.classList.add("armed");
+    armClose.t = setTimeout(() => { armClose.t = 0; b.textContent = "닫고 확정"; b.classList.remove("armed"); }, 4000);
+    return;
+  }
+  clearTimeout(armClose.t); armClose.t = 0; b.textContent = "닫고 확정"; b.classList.remove("armed");
+  b.disabled = true;
+  const { data, error } = await db.rpc("admin_final_set", { p_open: false });
+  if (error || data?.error) { b.disabled = false; return say($("svAdmMsg"), error ? serverMsg(error) : data.error); }
+  const top = data.result?.classes?.[0];
+  say($("svAdmMsg"), `최종 순위를 확정했어요.${top ? ` 1등: ${top.name} (한 사람당 ${top.per_capita ?? 0})` : ""} 순위 탭 맨 위에 보여요.`, "good");
+  loadSurveyAdmin();
+});
+$("svRefresh").addEventListener("click", loadSurveyAdmin);
+window.addEventListener("hcu:tab", e => { if (e.detail === "admin" && window.hcuProfile?.adminOk && !$("adminTools").hidden) loadSurveyAdmin(); });
+$("svCsv").addEventListener("click", async () => {
+  const b = $("svCsv"); b.disabled = true;
+  const { data, error } = await db.rpc("admin_survey_export");
+  b.disabled = false;
+  if (error) return say($("svAdmMsg"), serverMsg(error));
+  const rows = data ?? [];
+  const ids = [...new Set(rows.flatMap(r => [...Object.keys(r.pre_answers ?? {}), ...Object.keys(r.post_answers ?? {})]))].map(Number).sort((a, b) => a - b);
+  const head = ["계정코드", "반", "동아리", "교사", "배포전가입", "사전_걸린초", "사전_시각", "사후_걸린초", "사후_시각", "최종점수",
+    ...ids.map(i => `사전_${i}`), ...ids.map(i => `사후_${i}`)];
+  const sec = ms => ms == null ? "" : Math.round(ms / 1000);
+  const lines = [head.join(",")].concat(rows.map(r => [r.code, r.class_id, r.club, r.is_teacher ? 1 : 0, r.late ? 1 : 0,
+    sec(r.pre_ms), day(r.pre_at), sec(r.post_ms), day(r.post_at), r.final_score ?? "",
+    ...ids.map(i => r.pre_answers?.[i] ?? ""), ...ids.map(i => r.post_answers?.[i] ?? "")].map(cell).join(",")));
+  const stamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).replace(/[: ]/g, "-");
+  saveFile(lines.join("\n"), `설문응답_${stamp}.csv`);
+  say($("svAdmMsg"), `${rows.length}명의 응답을 내려받았어요. 0 은 “응답하지 않음”, 빈칸은 안 낸 것이에요. 문항 번호는 sql/09_survey.sql 에 있어요.`, "good");
+});
+
 /* ---------- 2단계 인증 (휴대폰 인증 앱의 6자리) ----------
    관리자는 비밀번호 + 인증 앱 6자리를 둘 다 알아야 관리 기능을 쓴다(서버 admin_ok 가 확인).
    처음 한 번은 인증 앱에 이 사이트를 연결(QR 찍기)하고, 그 뒤로는 로그인할 때마다 6자리만 넣는다. */
@@ -356,7 +424,7 @@ function mfaDone() {
     window.hcuProfile.adminOk = true;
     window.dispatchEvent(new Event("hcu:admin-ok"));
   }
-  loadAdminSets(); loadLocks();
+  loadAdminSets(); loadLocks(); loadSurveyAdmin();
 }
 
 const codeForm = (label, btn) => `

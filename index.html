@@ -66,6 +66,20 @@
     <p class="fine" id="gateFine">학교 이메일로만 가입할 수 있어요. 가입하면 확인 메일이 가요.</p>
   </form>
 
+  <!-- 설문 (sql/09_survey.sql). 사전 설문은 내야 게임을 할 수 있다. 사후 설문은 최종 제출 기간에 낸다. -->
+  <div id="surveyScreen" hidden role="dialog" aria-modal="true" aria-labelledby="svTitle">
+    <form class="svbox" id="svForm" novalidate>
+      <div class="svhead"><h2 id="svTitle">사전 설문</h2><button type="button" class="x" id="svClose" aria-label="닫기" hidden>×</button></div>
+      <p class="note" id="svLead"></p>
+      <p class="note">답은 기후 인식이 게임 전후로 어떻게 바뀌는지 알아보는 학교 프로젝트에만 써요. 이름과 이메일 없이 계정 코드로만 분석하고, 성적과는 관계없어요. 답하기 싫은 문항은 “응답하지 않음”을 고르면 돼요.</p>
+      <div id="svList"></div>
+      <label class="agree"><input id="svAgree" type="checkbox"> <span>위 내용을 읽었고, 답을 연구에 쓰는 데 동의해요</span></label>
+      <button type="submit" class="btn wide" id="svGo">제출하기</button>
+      <p class="msg" id="svMsg" hidden></p>
+      <p class="fine"><a href="#" id="svLogout">로그아웃</a></p>
+    </form>
+  </div>
+
   <!-- 계정 잠금 (매크로 의심). 관리자가 풀어야 사라진다. -->
   <div id="lockScreen" hidden>
     <div class="box">
@@ -96,6 +110,7 @@
   </div>
 
   <div id="ticker" aria-live="polite"></div>
+  <div id="finalBar" hidden><span id="finalTxt"></span><button class="btn sm" id="finalGo" hidden>사후 설문하고 최종 제출</button></div>
 
   <main>
   <!-- ===== 게임 ===== -->
@@ -184,6 +199,7 @@
 
   <!-- ===== 순위 ===== -->
   <section id="rank">
+    <div class="row col" id="finalCard" hidden></div>
     <div class="row prog" id="myRegion"></div>
     <div class="seg" id="rankSeg">
       <button class="on" data-r="class">반 순위</button>
@@ -254,6 +270,15 @@
       <p class="msg" id="exMsg" hidden></p>
     </div>
 
+    <div class="row col" id="surveyCard">
+      <div class="t">설문과 최종 제출</div>
+      <div class="d">“최종 제출 열기”를 누르면 모두에게 사후 설문이 떠요. 사후 설문을 낸 사람만 그 순간의 점수가 최종 점수로 들어가요(낸 뒤에 더 해도 바뀌지 않아요). “닫고 확정”을 누르면 최종 순위가 저장되고 순위 탭 맨 위에 보여요. 다시 열 수도 있어요. 결과와 CSV에는 이메일 없이 계정 코드만 나와요.</div>
+      <div id="svAdm"><p class="d">불러오는 중…</p></div>
+      <div class="frow"><button class="btn" id="finOpen">최종 제출 열기</button><button class="btn danger" id="finClose">닫고 확정</button></div>
+      <div class="frow"><button class="btn ghost" id="svCsv">응답 CSV 내려받기</button><button class="btn ghost" id="svRefresh">새로 읽기</button></div>
+      <p class="msg" id="svAdmMsg" hidden></p>
+    </div>
+
     <div class="row col" id="auditCard">
       <div class="t">보안 기록</div>
       <div class="d">누가, 언제, 어느 IP에서 무엇을 했는지 1년 동안 남아요. 고치거나 지울 수 없고, 줄마다 앞 줄과 이어진 해시가 있어 몰래 바꾸면 “무결성 확인”에서 드러나요. 학생은 계정 코드와 IP 앞 세 자리로만 보이고, 건의 글쓴이는 보이지 않아요. 이메일과 전체 IP가 담긴 원본은 운영 책임자가 법이나 학교 규정상 필요할 때만 확인해요. 이 기록을 본 것도 기록돼요.</div>
@@ -289,5 +314,6 @@
 <script type="module" src="js/rank.js"></script>
 <script type="module" src="js/voice.js"></script>
 <script type="module" src="js/admin.js"></script>
+<script type="module" src="js/survey.js"></script>
 </body>
 </html>

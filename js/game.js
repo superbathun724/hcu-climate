@@ -85,6 +85,7 @@ async function loadInfraLv() {
   drawInfra();
 }
 window.addEventListener("hcu:infra", loadInfraLv);
+window.addEventListener("hcu:surveyed", () => { pending = 0; if (window.hcuProfile) load(); });   // 사전 설문을 낸 뒤 서버 값으로 다시
 
 async function loadRegion(classId) {
   const { data: cls } = await db.from("classes").select("region_id").eq("id", classId).maybeSingle();
@@ -138,6 +139,9 @@ async function flush() {
   inflight = (async () => {
     const { data, error } = await db.rpc("submit_taps", f ? { p_n: n, p_flag: f } : { p_n: n });
     if (error) {
+      if (/사전 설문/.test(error.message || "")) {          // 설문 전에는 탭이 쌓이지 않는다(survey.js 가 설문을 띄운다)
+        flag = null; window.dispatchEvent(new Event("hcu:needsurvey")); return;
+      }
       pending += n;
       tick("누른 기록을 저장하지 못했어요. 인터넷 연결을 확인해 주세요.", "bad");
       return;

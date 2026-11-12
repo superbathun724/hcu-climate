@@ -180,13 +180,28 @@ begin
 end;
 $$;
 
--- 잠긴 계정이면 여기서 멈춘다. 코인이 생기거나 쓰이는 모든 함수의 첫 줄.
+-- 사전 설문(09_survey.sql)을 아직 안 냈으면 멈춘다. 게임은 사전 설문을 낸 뒤에만 할 수 있다.
+-- 09 를 아직 안 돌렸으면(표가 없으면) 건너뛴다.
+create or replace function public.assert_surveyed(p_user uuid)
+returns void language plpgsql stable security definer set search_path = public as $$
+declare v boolean;
+begin
+  if to_regclass('public.survey_responses') is null then return; end if;
+  execute 'select exists (select 1 from public.survey_responses where user_id = $1 and phase = ''pre'')' into v using p_user;
+  if not v then
+    raise exception '사전 설문을 먼저 해 주세요.' using errcode = 'P0001', hint = 'survey';
+  end if;
+end;
+$$;
+
+-- 잠긴 계정이면 여기서 멈춘다. 코인이 생기거나 쓰이는 모든 함수의 첫 줄. 사전 설문도 여기서 확인한다.
 create or replace function public.assert_unlocked(p_user uuid)
 returns void language plpgsql stable security definer set search_path = public as $$
 begin
   if exists (select 1 from public.players where user_id = p_user and locked_at is not null) then
     raise exception '계정이 잠겨 있어요. 관리자에게 알려 주세요.' using errcode = 'P0001';
   end if;
+  perform public.assert_surveyed(p_user);
 end;
 $$;
 
@@ -350,6 +365,7 @@ begin
   if p.locked_at is not null then
     return jsonb_build_object('locked', true, 'accepted', 0, 'balance', p.balance, 'taps_today', p.taps_today);
   end if;
+  perform public.assert_surveyed(v_uid);             -- 사전 설문을 낸 뒤에만 (09_survey.sql)
 
   if p.tap_day is distinct from v_today then p.taps_today := 0; end if;
 
@@ -536,6 +552,7 @@ $$;
 revoke execute on function public.ensure_player(uuid)                 from public, anon, authenticated;
 revoke execute on function public.lock_player(uuid, text, jsonb)      from public, anon, authenticated;
 revoke execute on function public.assert_unlocked(uuid)               from public, anon, authenticated;
+revoke execute on function public.assert_surveyed(uuid)               from public, anon, authenticated;
 revoke execute on function public.world_tick()                        from public, anon, authenticated;
 revoke execute on function public.my_state()                          from public, anon;
 revoke execute on function public.submit_taps(integer, jsonb)         from public, anon;

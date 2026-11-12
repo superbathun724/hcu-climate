@@ -24,6 +24,7 @@ export function say(el, text, kind = "bad") {
  *  영어(라이브러리·네트워크) 오류만 일반 문구로 바꾼다. */
 export function serverMsg(err) {
   const m = err?.message || "";
+  if (/사전 설문/.test(m)) window.dispatchEvent(new Event("hcu:needsurvey"));   // survey.js 가 설문 화면을 다시 띄운다
   if (/[가-힣]/.test(m)) return m;
   if (/failed to fetch|network/i.test(m)) return "인터넷 연결을 확인해 주세요.";
   console.error(err);
@@ -110,7 +111,7 @@ export function toTop(el) {
   window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   for (let n = el; n && n !== document.body; n = n.parentElement) if (n.scrollTop) n.scrollTop = 0;
 }
-const LAYER = ".panel, #gate, #lockScreen, main > section, #stSetup, #stCard, #stDone";
+const LAYER = ".panel, #gate, #lockScreen, #surveyScreen, main > section, #stSetup, #stCard, #stDone";
 const ON_CLASS = "#gate, main > section";            // 이 둘은 hidden 대신 class="on" 으로 보인다
 new MutationObserver(list => {
   for (const m of list) {

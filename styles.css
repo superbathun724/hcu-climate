@@ -377,6 +377,51 @@ code { display: block; margin: var(--space-xs) 0; padding: var(--space-xs); bord
 #lockScreen h2 { font-family: var(--font-body); font-size: var(--text-lg); letter-spacing: 0; color: var(--color-alert-ink); margin-bottom: var(--space-xs); }
 #lockScreen p { margin-bottom: var(--space-xs); color: var(--color-ink-2); }
 
+/* ---------- 설문 (js/survey.js): 탭 위를 덮는 종이 한 장. 잠금 화면이 그 위에 온다. ---------- */
+#surveyScreen { position: absolute; inset: 0; z-index: var(--z-modal); overflow: auto; padding: var(--space-md); background: var(--color-paper); border-radius: var(--radius-card); }
+.svbox { width: 100%; max-width: 720px; margin-inline: auto; display: flex; flex-direction: column; gap: var(--space-sm); }
+.svhead { display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm); }
+.svhead h2 { font-family: var(--font-body); font-size: var(--text-xl); letter-spacing: 0; color: var(--color-ink); }
+.svq { border: 0; margin: 0; padding: var(--space-md); border-radius: var(--radius-card); background: var(--grain), var(--color-card); box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule); min-width: 0; }
+.svq.need { box-shadow: inset 0 0 0 2px var(--color-alert); }
+.svt { display: flex; gap: var(--space-xs); padding: 0; font-weight: 700; font-size: var(--text-md); line-height: 1.45; margin-bottom: var(--space-sm); color: var(--color-ink); }
+legend.svt { float: left; width: 100%; }           /* 칸 테두리 위에 걸치지 않고 안쪽에 */
+.svq .lks { clear: both; }
+.svt small { font-weight: 400; color: var(--color-muted); }
+.svn { flex: none; font-family: var(--font-figure); color: var(--color-primary); min-width: 1.6em; }
+.svq textarea { width: 100%; }
+.lks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-xs); }
+.lk { position: relative; display: block; min-width: 0; }
+.lk input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.lk span { --e: var(--edge); display: grid; place-items: center; min-height: var(--control); padding: var(--space-2xs) var(--space-3xs); border-radius: var(--radius-stock); text-align: center;
+  font-size: var(--text-xs); font-weight: 700; line-height: 1.25; color: var(--color-ink); overflow-wrap: break-word; min-width: 0;
+  background: var(--grain), var(--color-card); box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule), 0 var(--e) 0 0 var(--color-edge);
+  translate: 0 0; transition: translate var(--dur-micro) var(--ease-snap), box-shadow var(--dur-micro) var(--ease-snap); }
+.lk input:checked + span { --e: 1px; translate: 0 3px; background: var(--grain), var(--color-primary); color: var(--color-on-primary); box-shadow: 0 var(--e) 0 0 var(--color-primary-deep); }
+.lk input:focus-visible + span { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.lk.skip { grid-column: 1 / -1; }
+.lk.skip span { min-height: 36px; font-weight: 400; color: var(--color-muted); }
+.lk.skip input:checked + span { background: var(--grain), var(--color-paper-3); color: var(--color-ink); box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule); }
+@media (hover: hover) { .lk:hover input:not(:checked) + span { --e: 6px; translate: 0 -1px; } }
+#surveyScreen .agree { margin-top: var(--space-xs); }
+
+/* 최종 제출 기간 띠 (탭 밑) */
+#finalBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs) var(--space-sm); margin: 0 0 var(--space-sm); padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-card); background: var(--grain), var(--color-card); box-shadow: inset 0 0 0 2px var(--color-primary); font-size: var(--text-sm); font-weight: 600; }
+#finalBar[hidden] { display: none; }
+#finalCard { box-shadow: inset 0 0 0 2px var(--color-primary); }
+#finalCard .rk { margin-top: var(--space-xs); }
+
+/* 관리: 설문 요약 표 */
+.svsum { margin-top: var(--space-xs); font-size: var(--text-xs); }
+.svr { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 5.5em); gap: var(--space-xs); padding: var(--space-2xs) 0; box-shadow: inset 0 calc(-1 * var(--rule-hair)) 0 0 var(--color-rule); }
+.svr span { min-width: 0; overflow-wrap: break-word; }
+.svr span + span { font-family: var(--font-figure); text-align: right; }
+.svr small { color: var(--color-muted); }
+.svh { font-weight: 700; color: var(--color-muted); }
+.svh span + span { font-family: var(--font-body); }
+@media (prefers-reduced-motion: reduce) { .lk span { transition: none; } }
+
 /* ---------- 바닥 ---------- */
 footer { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-md); padding: var(--space-sm) 0 var(--space-md); font-size: var(--text-xs); color: var(--color-muted); }
 footer #adminLink { display: contents; }
